@@ -1,63 +1,52 @@
-from cushy_serial import CushySerial  # comunicação serial com o BrainLink
-from BrainLinkParser import BrainLinkParser  # decodificação dos pacotes EEG
+"""Utilitário experimental para leitura serial do BrainLink em ambiente Windows."""
 
-PORTA_BRAINLINK = 'COM4'     # ajuste conforme seu ambiente
-BAUDRATE_BRAINLINK = 57600   # velocidade típica do BrainLink
-
-def onRaw(raw):
-    """
-    Callback para dados brutos do BrainLink.
-    Use este espaço para pré-processamento (ex.: filtros, FFT, logs).
-    """
-    # TODO: implementar análise de frequência se necessário
-    return
+from BrainLinkParser import BrainLinkParser
+from cushy_serial import CushySerial
 
 
-def onEEG(data):
-    """
-    Callback para dados decodificados do BrainLink.
-    - Normaliza bandas em porcentagem.
-    - Lida com ausência de contato (atenção e meditação = 0).
-    - Envia o nível de atenção ao Arduino.
-    """
-    # Soma das bandas para normalização
-    total = (
-        data.delta + data.theta + data.lowAlpha + data.highAlpha +
-        data.lowBeta + data.highBeta + data.lowGamma + data.highGamma
-    )
+PORTA_BRAINLINK = "COM4"
+BAUDRATE_BRAINLINK = 57600
+BANDAS_EEG = (
+    "delta",
+    "theta",
+    "lowAlpha",
+    "highAlpha",
+    "lowBeta",
+    "highBeta",
+    "lowGamma",
+    "highGamma",
+)
 
-    # Checa contanto/sinal válido
+
+def on_raw_data(_raw_data):
+    """Recebe amostras brutas reservadas para processamento posterior."""
+
+
+def on_eeg_data(data):
+    """Normaliza e apresenta uma amostra decodificada pelo parser."""
+    total = sum(getattr(data, band) for band in BANDAS_EEG)
+
     if data.attention == 0 and data.meditation == 0:
-        print("⚠️ Sensor desconectado ou sem contato com a pele. ⚠️")
+        print("Sensor sem contato com a pele ou indisponível.")
         return
 
-    # Protege contra divisão por zero
     if total == 0:
-        print("⚠️ Sinal EEG sem energia nas bandas (total = 0). Normalização indisponível.")
+        print("Amostra sem energia de banda; normalização indisponível.")
+        return
 
-    else:
-        # Normaliza e imprime porcentagens com duas casas
-        print(f"atenção: {data.attention} | meditação: {data.meditation}")
-        print(
-            "Ondas (%): "
-            f"delta {data.delta / total * 100:.2f} | "
-            f"theta {data.theta / total * 100:.2f} | "
-            f"lowAlpha {data.lowAlpha / total * 100:.2f} | "
-            f"highAlpha {data.highAlpha / total * 100:.2f} | "
-            f"lowBeta {data.lowBeta / total * 100:.2f} | "
-            f"highBeta {data.highBeta / total * 100:.2f} | "
-            f"lowGamma {data.lowGamma / total * 100:.2f} | "
-            f"highGamma {data.highGamma / total * 100:.2f}"
-        )
+    print(f"Atenção: {data.attention} | Meditação: {data.meditation}")
+    percentages = " | ".join(
+        f"{band}: {getattr(data, band) / total * 100:.2f}%"
+        for band in BANDAS_EEG
+    )
+    print(f"Bandas relativas: {percentages}")
 
-# Cria o parser do BrainLink
-parser = BrainLinkParser(onEEG, onRaw)
 
+parser = BrainLinkParser(on_eeg_data, on_raw_data)
 brainlink_serial = CushySerial(PORTA_BRAINLINK, BAUDRATE_BRAINLINK)
 
+
 @brainlink_serial.on_message()
-def handle_serial_message(msg: bytes):
-    """
-    Recebe bytes da porta do BrainLink e entrega para o parser.
-    """
-    parser.parse(msg)
+def handle_serial_message(message: bytes):
+    """Encaminha ao parser os bytes recebidos pela porta serial."""
+    parser.parse(message)

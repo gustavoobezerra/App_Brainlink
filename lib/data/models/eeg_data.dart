@@ -1,83 +1,10 @@
-// =============================================================================
-// EEG_DATA.DART - Modelo de Dados das Ondas Cerebrais
-// =============================================================================
-// Este arquivo define a estrutura de dados que representa as informações
-// recebidas do headset BrainLink Lite. É o "contrato" de como os dados
-// devem ser organizados em todo o aplicativo.
-// =============================================================================
-
-/// Classe que representa os dados de EEG recebidos do BrainLink Lite.
-/// MADE BY GUSTAVO BEZERRA
-/// Esta classe é imutável (todos os campos são `final`), o que significa
-/// que uma vez criada, não pode ser modificada. Isso é uma boa prática
-/// para evitar bugs relacionados a estado mutável.
-/// Se você Leu isso Você é Tricolor agora.
+/// Amostra consolidada de eletroencefalografia recebida do BrainLink Lite.
+///
+/// As potências das bandas são valores relativos fornecidos pelo dispositivo.
+/// Atenção, meditação e qualidade do sinal seguem as escalas definidas
+/// pelo SDK do fabricante.
 class EEGData {
-  // ---------------------------------------------------------------------------
-  // CAMPOS PRINCIPAIS - Métricas de Estado Mental
-  // ---------------------------------------------------------------------------
-  
-  /// Nível de atenção do usuário (0-100).
-  /// Valores mais altos indicam maior foco/concentração.
-  /// Calculado pelo algoritmo eSense™ da NeuroSky.
-  final int attention;
-
-  /// Nível de meditação/relaxamento do usuário (0-100).
-  /// Valores mais altos indicam maior relaxamento.
-  /// Calculado pelo algoritmo eSense™ da NeuroSky.
-  final int meditation;
-
-  /// Qualidade do sinal (0-200).
-  /// 0 = sinal perfeito, 200 = sem contato com a pele.
-  /// Valores acima de 50 indicam problemas de contato.
-  /// Quem foi o Maldito que achou que isso seria intuitivo?
-  final int signalQuality;
-
-  // ---------------------------------------------------------------------------
-  // CAMPOS DE ONDAS CEREBRAIS - Potência por Banda de Frequência
-  // ---------------------------------------------------------------------------
-  // Cada valor representa a "força" daquela frequência no sinal EEG.
-  // Os valores são números inteiros sem unidade específica (valores relativos).
-  
-  /// Ondas Delta (0.5-4 Hz) - Associadas ao sono profundo.
-  final int delta;
-
-  /// Ondas Theta (4-8 Hz) - Associadas à sonolência e meditação profunda.
-  final int theta;
-
-  /// Ondas Alpha Baixas (8-10 Hz) - Relaxamento leve, olhos fechados.
-  final int lowAlpha;
-
-  /// Ondas Alpha Altas (10-12 Hz) - Relaxamento alerta.
-  final int highAlpha;
-
-  /// Ondas Beta Baixas (12-15 Hz) - Pensamento calmo e focado.
-  final int lowBeta;
-
-  /// Ondas Beta Altas (15-18 Hz) - Pensamento ativo e engajado.
-  final int highBeta;
-
-  /// Ondas Gamma Baixas (18-30 Hz) - Processamento cognitivo.
-  final int lowGamma;
-
-  /// Ondas Gamma Médias (30-40 Hz) - Alto processamento cognitivo.
-  final int midGamma;
-
-  // ---------------------------------------------------------------------------
-  // CAMPO DE TIMESTAMP
-  // ---------------------------------------------------------------------------
-  
-  /// Momento em que os dados foram recebidos.
-  /// Útil para criar gráficos históricos e calcular taxas de atualização.
-  final DateTime timestamp;
-
-  // ---------------------------------------------------------------------------
-  // CONSTRUTOR
-  // ---------------------------------------------------------------------------
-  
-  /// Construtor principal da classe.
-  /// Todos os parâmetros são obrigatórios e nomeados para maior clareza.
-  EEGData({
+  const EEGData({
     required this.attention,
     required this.meditation,
     required this.signalQuality,
@@ -91,20 +18,44 @@ class EEGData {
     required this.midGamma,
     required this.timestamp,
   });
-///O sistema sabe oque é cada coisa porque está tipado no contrutor.
-  // ---------------------------------------------------------------------------
-  // FACTORY CONSTRUCTOR - Criar a partir de Map (JSON)
-  // ---------------------------------------------------------------------------
-  
-  /// Cria uma instância de EEGData a partir de um Map.
-  /// O mapa ele age muitas vezes como um filtro de dados e excluindo aquilo que não serve para nós.
-  /// Este método é usado para converter os dados recebidos do código Java
-  /// (via MethodChannel) em um objeto Dart tipado.
-  /// 
-  /// Exemplo de uso:
-  /// ```dart
-  /// final data = EEGData.fromMap({'attention': 75, 'meditation': 60, ...});
-  /// ```
+
+  /// Índice de atenção na escala de 0 a 100.
+  final int attention;
+
+  /// Índice de meditação na escala de 0 a 100.
+  final int meditation;
+
+  /// Qualidade do sinal na escala de 0 a 200; valores menores são melhores.
+  final int signalQuality;
+
+  /// Potência relativa da banda delta.
+  final int delta;
+
+  /// Potência relativa da banda theta.
+  final int theta;
+
+  /// Potência relativa da faixa inferior da banda alfa.
+  final int lowAlpha;
+
+  /// Potência relativa da faixa superior da banda alfa.
+  final int highAlpha;
+
+  /// Potência relativa da faixa inferior da banda beta.
+  final int lowBeta;
+
+  /// Potência relativa da faixa superior da banda beta.
+  final int highBeta;
+
+  /// Potência relativa da faixa inferior da banda gama.
+  final int lowGamma;
+
+  /// Potência relativa da faixa intermediária da banda gama.
+  final int midGamma;
+
+  /// Instante de aquisição da amostra.
+  final DateTime timestamp;
+
+  /// Converte o mapa recebido pelo canal nativo em uma amostra tipada.
   factory EEGData.fromMap(Map<String, dynamic> map) {
     return EEGData(
       attention: map['attention'] as int? ?? 0,
@@ -118,21 +69,16 @@ class EEGData {
       highBeta: map['highBeta'] as int? ?? 0,
       lowGamma: map['lowGamma'] as int? ?? 0,
       midGamma: map['midGamma'] as int? ?? 0,
-      timestamp: DateTime.now(),
+      timestamp: _parseTimestamp(map['timestamp']),
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // FACTORY CONSTRUCTOR - Dados Vazios/Iniciais
-  // ---------------------------------------------------------------------------
-  
-  /// Cria uma instância com todos os valores zerados.
-  /// Útil para inicializar a interface antes de receber dados reais.
+  /// Cria uma amostra inicial que representa ausência de sinal.
   factory EEGData.empty() {
     return EEGData(
       attention: 0,
       meditation: 0,
-      signalQuality: 200, // 200 = sem sinal (pior caso)
+      signalQuality: 200,
       delta: 0,
       theta: 0,
       lowAlpha: 0,
@@ -145,34 +91,33 @@ class EEGData {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // GETTERS AUXILIARES
-  // ---------------------------------------------------------------------------
-  
-  /// Retorna true se o sinal está bom (qualidade <= 50).
+  /// Indica se a amostra possui qualidade de sinal adequada.
   bool get hasGoodSignal => signalQuality <= 50;
 
-  /// Retorna true se há contato com a pele (qualidade < 200).
-  /// Ainda me confundo com essa desgraça por que que 200 é ruim.
+  /// Indica se o sensor registra contato com a pele.
   bool get hasContact => signalQuality < 200;
 
-  /// Retorna a soma de todas as ondas Alpha (baixa + alta).
   int get totalAlpha => lowAlpha + highAlpha;
 
-  /// Retorna a soma de todas as ondas Beta (baixa + alta).
   int get totalBeta => lowBeta + highBeta;
 
-  /// Retorna a soma de todas as ondas Gamma (baixa + média).
   int get totalGamma => lowGamma + midGamma;
 
-  // ---------------------------------------------------------------------------
-  // MÉTODO TOSTRING - Para Debug
-  // ---------------------------------------------------------------------------
-  
+  static DateTime _parseTimestamp(Object? value) {
+    if (value is int) {
+      return DateTime.fromMillisecondsSinceEpoch(value);
+    }
+    if (value is String) {
+      return DateTime.tryParse(value) ?? DateTime.now();
+    }
+    return DateTime.now();
+  }
+
   @override
   String toString() {
     return 'EEGData(attention: $attention, meditation: $meditation, '
-        'signal: $signalQuality, delta: $delta, theta: $theta, '
-        'alpha: $totalAlpha, beta: $totalBeta, gamma: $totalGamma)';
+        'signalQuality: $signalQuality, delta: $delta, theta: $theta, '
+        'alpha: $totalAlpha, beta: $totalBeta, gamma: $totalGamma, '
+        'timestamp: $timestamp)';
   }
 }

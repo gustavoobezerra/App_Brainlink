@@ -1,70 +1,20 @@
-// =============================================================================
-// MOCK_DATA_SERVICE.DART - Serviço de Dados Simulados
-// =============================================================================
-// Este arquivo fornece dados simulados de EEG para testes sem o dispositivo
-// físico BrainLink. Gera dados realistas que mudam ao longo do tempo.
-// =============================================================================
-
 import 'dart:async';
 import 'dart:math';
+
 import '../data/models/eeg_data.dart';
 
-/// Serviço que gera dados simulados de EEG para testes.
+/// Produz séries sintéticas para validar o fluxo e a interface sem hardware.
 ///
-/// Este serviço simula o comportamento do BrainLink gerando dados
-/// aleatórios mas realistas de ondas cerebrais.
+/// Os perfis e valores não representam medições fisiológicas nem substituem
+/// dados coletados sob um protocolo experimental.
 class MockDataService {
-  // ---------------------------------------------------------------------------
-  // SINGLETON PATTERN
-  // ---------------------------------------------------------------------------
-
-  static final MockDataService _instance = MockDataService._internal();
   factory MockDataService() => _instance;
+
   MockDataService._internal();
 
-  // ---------------------------------------------------------------------------
-  // STREAM CONTROLLERS
-  // ---------------------------------------------------------------------------
-
-  /// Controller para emitir dados de EEG simulados.
-  final StreamController<EEGData> _dataController =
-      StreamController<EEGData>.broadcast();
-
-  /// Stream público de dados simulados.
-  Stream<EEGData> get dataStream => _dataController.stream;
-
-  /// Controller para estado de conexão simulado.
-  final StreamController<bool> _connectionController =
-      StreamController<bool>.broadcast();
-
-  /// Stream público de estado de conexão.
-  Stream<bool> get connectionStream => _connectionController.stream;
-
-  // ---------------------------------------------------------------------------
-  // ESTADO INTERNO
-  // ---------------------------------------------------------------------------
-
-  /// Timer para gerar dados periodicamente.
-  Timer? _dataTimer;
-
-  /// Flag indicando se está "conectado" (gerando dados).
-  bool _isConnected = false;
-
-  /// Gerador de números aleatórios.
-  final Random _random = Random();
-
-  /// Contador para variar os dados ao longo do tempo.
-  int _counter = 0;
-
-  // ---------------------------------------------------------------------------
-  // PARÂMETROS DE SIMULAÇÃO
-  // ---------------------------------------------------------------------------
-
-  /// Intervalo entre atualizações de dados (em milissegundos).
-  static const int updateInterval = 1000; // 1 segundo
-
-  /// Valores base para cada onda cerebral (para gerar variações realistas).
-  static const Map<String, int> baseValues = {
+  static final MockDataService _instance = MockDataService._internal();
+  static const int _updateIntervalMilliseconds = 1000;
+  static const Map<String, int> _baseValues = {
     'delta': 50000,
     'theta': 80000,
     'lowAlpha': 120000,
@@ -75,13 +25,23 @@ class MockDataService {
     'midGamma': 30000,
   };
 
-  // ---------------------------------------------------------------------------
-  // MÉTODOS PÚBLICOS
-  // ---------------------------------------------------------------------------
+  final StreamController<EEGData> _dataController =
+      StreamController<EEGData>.broadcast();
+  final StreamController<bool> _connectionController =
+      StreamController<bool>.broadcast();
+  final Random _random = Random();
 
-  /// Inicia a simulação de conexão e geração de dados.
-  ///
-  /// Retorna `true` sempre (simulação sempre funciona).
+  Timer? _dataTimer;
+  bool _isConnected = false;
+  int _counter = 0;
+
+  Stream<EEGData> get dataStream => _dataController.stream;
+
+  Stream<bool> get connectionStream => _connectionController.stream;
+
+  bool get isConnected => _isConnected;
+
+  /// Inicia a sessão simulada após uma latência de conexão controlada.
   Future<bool> startMockData() async {
     if (_isConnected) {
       return true;
@@ -89,20 +49,20 @@ class MockDataService {
 
     _isConnected = true;
     _connectionController.add(true);
+    await Future<void>.delayed(const Duration(seconds: 1));
 
-    // Aguarda um pouco para simular o tempo de conexão
-    await Future.delayed(const Duration(seconds: 1));
+    if (!_isConnected) {
+      return false;
+    }
 
-    // Inicia o timer para gerar dados periodicamente
     _dataTimer = Timer.periodic(
-      const Duration(milliseconds: updateInterval),
+      const Duration(milliseconds: _updateIntervalMilliseconds),
       (_) => _generateMockData(),
     );
-
     return true;
   }
 
-  /// Para a simulação de dados.
+  /// Interrompe a sessão simulada e reinicia o ciclo de perfis.
   Future<void> stopMockData() async {
     _dataTimer?.cancel();
     _dataTimer = null;
@@ -111,175 +71,93 @@ class MockDataService {
     _counter = 0;
   }
 
-  /// Retorna se está atualmente gerando dados.
-  bool get isConnected => _isConnected;
-
-  // ---------------------------------------------------------------------------
-  // GERAÇÃO DE DADOS MOCK
-  // ---------------------------------------------------------------------------
-
-  /// Gera um pacote de dados de EEG simulado.
   void _generateMockData() {
     _counter++;
+    final profile = _profileForCounter();
 
-    // Simula diferentes estados mentais ao longo do tempo
-    final mentalState = _getMentalStateForCounter();
-
-    // Gera dados baseados no estado mental
-    final data = EEGData(
-      attention: _generateAttention(mentalState),
-      meditation: _generateMeditation(mentalState),
-      signalQuality: _generateSignalQuality(),
-      delta: _generateWaveValue('delta', mentalState),
-      theta: _generateWaveValue('theta', mentalState),
-      lowAlpha: _generateWaveValue('lowAlpha', mentalState),
-      highAlpha: _generateWaveValue('highAlpha', mentalState),
-      lowBeta: _generateWaveValue('lowBeta', mentalState),
-      highBeta: _generateWaveValue('highBeta', mentalState),
-      lowGamma: _generateWaveValue('lowGamma', mentalState),
-      midGamma: _generateWaveValue('midGamma', mentalState),
-      timestamp: DateTime.now(),
+    _dataController.add(
+      EEGData(
+        attention: _generateAttention(profile),
+        meditation: _generateMeditation(profile),
+        signalQuality: _generateSignalQuality(),
+        delta: _generateWaveValue('delta', profile),
+        theta: _generateWaveValue('theta', profile),
+        lowAlpha: _generateWaveValue('lowAlpha', profile),
+        highAlpha: _generateWaveValue('highAlpha', profile),
+        lowBeta: _generateWaveValue('lowBeta', profile),
+        highBeta: _generateWaveValue('highBeta', profile),
+        lowGamma: _generateWaveValue('lowGamma', profile),
+        midGamma: _generateWaveValue('midGamma', profile),
+        timestamp: DateTime.now(),
+      ),
     );
-
-    // Emite os dados
-    _dataController.add(data);
   }
 
-  /// Determina o estado mental simulado baseado no contador.
-  ///
-  /// Cicla entre diferentes estados para variar os dados:
-  /// - Relaxado (0-10s)
-  /// - Focado (10-20s)
-  /// - Meditando (20-30s)
-  /// - Normal (30-40s)
-  _MentalState _getMentalStateForCounter() {
+  _SimulationProfile _profileForCounter() {
     final cycle = (_counter ~/ 10) % 4;
     switch (cycle) {
       case 0:
-        return _MentalState.relaxed;
+        return _SimulationProfile.relaxed;
       case 1:
-        return _MentalState.focused;
+        return _SimulationProfile.focused;
       case 2:
-        return _MentalState.meditating;
+        return _SimulationProfile.meditative;
       default:
-        return _MentalState.normal;
+        return _SimulationProfile.baseline;
     }
   }
 
-  /// Gera valor de atenção baseado no estado mental.
-  int _generateAttention(_MentalState state) {
-    int base;
-    switch (state) {
-      case _MentalState.relaxed:
-        base = 40;
-        break;
-      case _MentalState.focused:
-        base = 85;
-        break;
-      case _MentalState.meditating:
-        base = 50;
-        break;
-      case _MentalState.normal:
-        base = 60;
-        break;
-    }
-
-    // Adiciona variação aleatória de ±15
+  int _generateAttention(_SimulationProfile profile) {
+    final base = switch (profile) {
+      _SimulationProfile.relaxed => 40,
+      _SimulationProfile.focused => 85,
+      _SimulationProfile.meditative => 50,
+      _SimulationProfile.baseline => 60,
+    };
     return (base + _random.nextInt(30) - 15).clamp(0, 100);
   }
 
-  /// Gera valor de meditação baseado no estado mental.
-  int _generateMeditation(_MentalState state) {
-    int base;
-    switch (state) {
-      case _MentalState.relaxed:
-        base = 70;
-        break;
-      case _MentalState.focused:
-        base = 45;
-        break;
-      case _MentalState.meditating:
-        base = 90;
-        break;
-      case _MentalState.normal:
-        base = 55;
-        break;
-    }
-
-    // Adiciona variação aleatória de ±15
+  int _generateMeditation(_SimulationProfile profile) {
+    final base = switch (profile) {
+      _SimulationProfile.relaxed => 70,
+      _SimulationProfile.focused => 45,
+      _SimulationProfile.meditative => 90,
+      _SimulationProfile.baseline => 55,
+    };
     return (base + _random.nextInt(30) - 15).clamp(0, 100);
   }
 
-  /// Gera qualidade do sinal (simula ocasionalmente sinal ruim).
   int _generateSignalQuality() {
-    // 90% das vezes, sinal bom (0-50)
-    // 10% das vezes, sinal ruim (50-150)
     if (_random.nextDouble() < 0.9) {
       return _random.nextInt(50);
-    } else {
-      return 50 + _random.nextInt(100);
     }
+    return 50 + _random.nextInt(100);
   }
 
-  /// Gera valor de uma onda cerebral específica.
-  int _generateWaveValue(String waveType, _MentalState state) {
-    final base = baseValues[waveType] ?? 50000;
+  int _generateWaveValue(String waveType, _SimulationProfile profile) {
+    final base = _baseValues[waveType] ?? 50000;
+    final multiplier = switch (profile) {
+      _SimulationProfile.relaxed =>
+        waveType.contains('alpha') || waveType == 'theta' ? 1.5 : 0.8,
+      _SimulationProfile.focused => waveType.contains('beta') ? 1.6 : 0.7,
+      _SimulationProfile.meditative =>
+        waveType == 'theta' || waveType.contains('alpha') ? 2.0 : 0.5,
+      _SimulationProfile.baseline => 1.0,
+    };
+    final variation = 0.7 + (_random.nextDouble() * 0.6);
 
-    // Multiplica baseado no estado mental
-    double multiplier;
-    switch (state) {
-      case _MentalState.relaxed:
-        // Alpha e Theta altos
-        multiplier = (waveType.contains('alpha') || waveType == 'theta')
-            ? 1.5 : 0.8;
-        break;
-      case _MentalState.focused:
-        // Beta alto
-        multiplier = waveType.contains('beta') ? 1.6 : 0.7;
-        break;
-      case _MentalState.meditating:
-        // Theta e Alpha muito altos
-        multiplier = (waveType == 'theta' || waveType.contains('alpha'))
-            ? 2.0 : 0.5;
-        break;
-      case _MentalState.normal:
-        multiplier = 1.0;
-        break;
-    }
-
-    // Adiciona variação aleatória de ±30%
-    final variation = 0.7 + (_random.nextDouble() * 0.6); // 0.7 a 1.3
-
-    return ((base * multiplier * variation).toInt()).clamp(0, 999999);
+    return (base * multiplier * variation).toInt().clamp(0, 999999);
   }
 
-  // ---------------------------------------------------------------------------
-  // CLEANUP
-  // ---------------------------------------------------------------------------
-
-  /// Libera recursos.
-  void dispose() {
+  /// Encerra os recursos mantidos pelo serviço.
+  Future<void> dispose() async {
     _dataTimer?.cancel();
-    _dataController.close();
-    _connectionController.close();
+    await Future.wait([
+      _dataController.close(),
+      _connectionController.close(),
+    ]);
   }
 }
 
-// =============================================================================
-// ENUM - Estados Mentais Simulados
-// =============================================================================
-
-/// Estados mentais que podem ser simulados.
-enum _MentalState {
-  /// Estado relaxado (Alpha alto).
-  relaxed,
-
-  /// Estado focado (Beta alto).
-  focused,
-
-  /// Estado meditando (Theta e Alpha muito altos).
-  meditating,
-
-  /// Estado normal (balanceado).
-  normal,
-}
+/// Perfis numéricos utilizados exclusivamente para variar a demonstração.
+enum _SimulationProfile { relaxed, focused, meditative, baseline }

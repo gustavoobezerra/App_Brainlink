@@ -22,7 +22,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
-        android:label="BrainLink Lite"
+        android:label="BrainLink EEG Monitor"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 

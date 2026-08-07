@@ -1,60 +1,19 @@
-# =============================================================================
-# PUBSPEC.YAML - Arquivo de Configuração do Projeto Flutter
-# =============================================================================
-# Este arquivo define as dependências, metadados e configurações do projeto.
-# É o equivalente ao package.json do Node.js ou requirements.txt do Python.
-# =============================================================================
-
 name: brainlink_app
-description: "Aplicativo para monitoramento de ondas cerebrais com BrainLink Lite"
-publish_to: 'none' # Impede publicação acidental no pub.dev
+description: "Protótipo acadêmico para visualização de dados EEG do BrainLink Lite."
+publish_to: 'none'
 version: 1.0.0+1
 
-# -----------------------------------------------------------------------------
-# CONFIGURAÇÃO DO AMBIENTE
-# -----------------------------------------------------------------------------
-# Define as versões mínimas do SDK Dart necessárias para o projeto.
 environment:
   sdk: ^3.5.0
 
-# -----------------------------------------------------------------------------
-# DEPENDÊNCIAS DE PRODUÇÃO
-# -----------------------------------------------------------------------------
-# Pacotes necessários para o funcionamento do aplicativo.
 dependencies:
   flutter:
     sdk: flutter
 
-  # Interface e Ícones
-  cupertino_icons: ^1.0.8          # Ícones estilo iOS
-
-  # Comunicação Bluetooth
-  flutter_blue_plus: ^2.1.0       # Biblioteca para BLE (Bluetooth Low Energy)
-
-  # Gráficos e Visualização
-  fl_chart: ^1.1.1                # Biblioteca de gráficos (barras, linhas, etc.)
-
-  # Gerenciamento de Permissões
-  permission_handler: ^12.0.1      # Solicitar permissões do sistema (Bluetooth, Localização)
-
-  # Utilitários
-  rxdart: ^0.28.0                  # Extensões reativas para Streams (debounce, throttle, etc.)
-
-# -----------------------------------------------------------------------------
-# DEPENDÊNCIAS DE DESENVOLVIMENTO
-# -----------------------------------------------------------------------------
-# Pacotes usados apenas durante o desenvolvimento (testes, linting, etc.)
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^6.0.0            # Regras de lint para código limpo
+  flutter_lints: ^6.0.0
 
-# -----------------------------------------------------------------------------
-# CONFIGURAÇÃO DO FLUTTER
-# -----------------------------------------------------------------------------
 flutter:
-  uses-material-design: true       # Habilita Material Design (ícones, temas, etc.)
-
-  # Assets (imagens, fontes, etc.) - descomente quando adicionar
-  # assets:
-  #   - assets/images/
+  uses-material-design: true
