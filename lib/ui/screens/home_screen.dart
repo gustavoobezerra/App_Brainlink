@@ -18,7 +18,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   StreamSubscription<EEGData>? _dataSubscription;
   StreamSubscription<bool>? _connectionSubscription;
-  EEGData _latestData = EEGData.empty();
+  EEGData _latestData = EEGData.absent();
   bool _isCollecting = false;
   bool _isChangingState = false;
 
@@ -79,7 +79,8 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
     final maximumBandPower = bands.fold<int>(
       1,
-      (current, band) => band.value > current ? band.value : current,
+      (current, band) =>
+          (band.value != null && band.value! > current) ? band.value! : current,
     );
 
     return Scaffold(
@@ -153,9 +154,10 @@ class _HomeScreenState extends State<HomeScreen> {
                             width: itemWidth,
                             child: _MetricCard(
                               label: 'Atenção',
-                              value: '${_latestData.attention}',
-                              detail: 'Escala eSense de 0 a 100',
-                              progress: _latestData.attention / 100,
+                              value: _formatValue(_latestData.attention),
+                              detail: 'Índice do fabricante '
+                                  '(algoritmo proprietário)',
+                              progress: (_latestData.attention ?? 0) / 100,
                               icon: Icons.center_focus_strong_outlined,
                               color: const Color(0xFF69A7FF),
                             ),
@@ -164,9 +166,10 @@ class _HomeScreenState extends State<HomeScreen> {
                             width: itemWidth,
                             child: _MetricCard(
                               label: 'Meditação',
-                              value: '${_latestData.meditation}',
-                              detail: 'Escala eSense de 0 a 100',
-                              progress: _latestData.meditation / 100,
+                              value: _formatValue(_latestData.meditation),
+                              detail: 'Índice do fabricante '
+                                  '(algoritmo proprietário)',
+                              progress: (_latestData.meditation ?? 0) / 100,
                               icon: Icons.self_improvement_outlined,
                               color: const Color(0xFF62D4B5),
                             ),
@@ -175,9 +178,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             width: itemWidth,
                             child: _MetricCard(
                               label: 'Qualidade do sinal',
-                              value: '${_latestData.signalQuality}',
+                              value: _formatValue(_latestData.signalQuality),
                               detail: _signalDescription(_latestData),
-                              progress: (200 - _latestData.signalQuality) / 200,
+                              progress:
+                                  (200 - (_latestData.signalQuality ?? 200)) /
+                                      200,
                               icon: Icons.sensors_outlined,
                               color: const Color(0xFFF4C56A),
                             ),
@@ -262,11 +267,19 @@ class _HomeScreenState extends State<HomeScreen> {
         '${twoDigits(value.second)}';
   }
 
+  /// Ausência de dado é exibida como ausência, nunca como zero: um "0" na tela
+  /// é indistinguível de uma medida real de valor zero.
+  static String _formatValue(int? value) => value?.toString() ?? '—';
+
   static String _signalDescription(EEGData data) {
-    if (!data.hasContact) {
+    final contato = data.hasContact;
+    if (contato == null) {
+      return 'Sem leitura de qualidade';
+    }
+    if (!contato) {
       return 'Sem contato com o sensor';
     }
-    if (data.hasGoodSignal) {
+    if (data.hasGoodSignal ?? false) {
       return 'Sinal adequado para aquisição';
     }
     return 'Recomenda-se ajustar o sensor';
@@ -511,7 +524,7 @@ class _BandRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final proportion = (band.value / maximum).clamp(0.0, 1.0);
+    final proportion = ((band.value ?? 0) / maximum).clamp(0.0, 1.0);
 
     return Row(
       children: [
@@ -562,7 +575,10 @@ class _BandRow extends StatelessWidget {
     );
   }
 
-  static String _compactNumber(int value) {
+  static String _compactNumber(int? value) {
+    if (value == null) {
+      return '—';
+    }
     if (value >= 1000000) {
       return '${(value / 1000000).toStringAsFixed(1)} M';
     }
@@ -578,5 +594,5 @@ class _BandData {
 
   final String name;
   final String range;
-  final int value;
+  final int? value;
 }
