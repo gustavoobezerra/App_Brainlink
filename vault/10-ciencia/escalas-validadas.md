@@ -42,10 +42,22 @@ iniciativa de entrevistas diagnósticas da **Organização Mundial da Saúde**.
 | Licença | Uso gratuito sem permissão formal, com atribuição obrigatória |
 | Respondente | O próprio |
 
-O instrumento não pode ser adaptado: as cinco opções de resposta, o texto e o
-algoritmo precisam permanecer intactos. Cada resposta que cai na faixa sombreada
-oficial conta um ponto. Quatro ou mais respostas de rastreio indicam que vale
-conversar com um profissional de saúde.
+O instrumento não pode ser adaptado: as cinco opções de resposta e o texto
+precisam permanecer intactos. O aplicativo usa a regra alternativa publicada
+pelos responsáveis pelo ASRS em 28/02/2024: Nunca = 0, Raramente = 1, Algumas
+vezes = 2, Freqüentemente = 3 e Muito freqüentemente = 4. A soma vai de 0 a 24,
+com ponto de corte de rastreio em 14.
+
+| Pontuação | Estrato oficial | Rótulo neutro no app |
+| --- | --- | --- |
+| 0–9 | *low negative* | Faixa inferior de rastreio |
+| 10–13 | *high negative* | Próximo ao ponto de corte |
+| 14–17 | *low positive range* | Faixa de rastreio atingida |
+| 18–24 | *high positive range* | Faixa superior de rastreio |
+
+A folha PT-BR ainda mostra a correção sombreada original de 0 a 6. A atualização
+oficial recomenda a soma 0–24 como mais robusta para pesquisa, prevalência e
+correlatos; por isso ela é a regra versionada e testada neste aplicativo.
 
 ### Correção de licença registrada em 17/08/2026
 

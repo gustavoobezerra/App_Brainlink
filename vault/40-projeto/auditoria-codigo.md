@@ -12,12 +12,14 @@ testes Flutter, lint Android, build e inspeção do APK.
 
 ## Produto atual
 
-O aplicativo possui **um único fluxo visual**, sem abas, diário ou questionário:
+O aplicativo possui **um único fluxo visual**, sem abas, diário ou histórico:
 
 1. demonstração ou conexão ao BrainLink;
 2. instruções de posicionamento e imobilidade;
 3. coleta guiada com olhos abertos e fechados;
-4. velocímetro de qualidade da coleta, dados proprietários e exportação.
+4. velocímetro de qualidade da coleta e dados proprietários;
+5. ASRS v1.1 de seis perguntas para adultos, em resultado separado;
+6. exportação ou repetição.
 
 O hardware usa duas fases de um minuto. A demonstração condensa cada fase em
 oito segundos para ser apresentável sem headset.
@@ -26,12 +28,13 @@ oito segundos para ser apresentável sem headset.
 
 | Camada | Estado |
 | --- | --- |
-| Interface | fluxo único responsivo, instruções, contagem e velocímetro |
+| Interface | fluxo único responsivo, instruções, contagem, velocímetro e ASRS |
 | Hardware | descoberta Bluetooth Clássico, conexão e erros expostos ao Flutter |
 | EEG consolidado | snapshot somente após `EEGPOWER` válido; ausência preservada |
 | EEG bruto | `EventChannel` em lotes de 128 amostras com sequência e perdas |
-| Resultado | qualidade de contato/continuidade; nunca classifica a pessoa |
-| Exportação | HTML e TXT, somente sob ação da pessoa |
+| Resultado EEG | qualidade de contato/continuidade; nunca classifica a pessoa |
+| Resultado ASRS | 0–24, corte 14 e quatro estratos; nunca combinado ao EEG |
+| Exportação | HTML e TXT com seções separadas, somente sob ação da pessoa |
 | Qualidade | testes de modelo, interface, exportação e linguagem; CI no GitHub |
 
 ## Correções consolidadas
@@ -45,6 +48,7 @@ oito segundos para ser apresentável sem headset.
 - desconexão limpa as métricas;
 - `parseData` removido;
 - compartilhamento limitado aos diretórios privados via `FileProvider`;
+- texto oficial PT-BR e limites 0/9/10/13/14/17/18/24 do ASRS cobertos por teste;
 - arquivos da IDE removidos do versionamento.
 
 ## Limites abertos

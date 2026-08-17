@@ -11,9 +11,10 @@ atualizado: 2026-08-17
 > Ver [[linguagem-permitida]].
 
 > [!note] Estado do produto em 17/08/2026
-> Esta abordagem permanece documentada como alternativa de pesquisa, mas o
-> diário, o histórico e o ASRS foram retirados da interface atual. O aplicativo
-> de apresentação executa apenas coleta guiada e avalia qualidade do sinal.
+> Esta abordagem permanece documentada como alternativa de pesquisa. Diário e
+> histórico continuam fora da interface atual. O ASRS adulto de seis perguntas
+> retornou como etapa curta depois da coleta, visual e matematicamente separado
+> do BrainLink.
 
 ## O que é
 

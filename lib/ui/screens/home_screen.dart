@@ -5,13 +5,14 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../data/models/asrs_screener_6.dart';
 import '../../data/models/eeg_data.dart';
 import '../../native/brainlink_bridge.dart';
 import '../../services/guided_collection_report_exporter.dart';
 
 enum AcquisitionMode { demonstration, hardware }
 
-enum CollectionStep { choice, instructions, running, result }
+enum CollectionStep { choice, instructions, running, result, screening }
 
 enum CollectionPhase { eyesOpen, eyesClosed }
 
@@ -130,6 +131,8 @@ class _HomeScreenState extends State<HomeScreen> {
   DateTime? _startedAt;
   DateTime? _endedAt;
   final List<_Reading> _readings = [];
+  final List<AsrsResponse?> _asrsAnswers =
+      List<AsrsResponse?>.filled(AsrsScreener6.itemCount, null);
 
   bool _showHardware = false;
   bool _scanning = false;
@@ -143,10 +146,19 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _deviceGateway = widget.deviceGateway ?? NativeBrainLinkGateway(_bridge);
+    _connected = _bridge.isConnected;
     _dataSubscription = _bridge.eegDataStream.listen(_onHardwareData);
     _connectionSubscription = _bridge.connectionStateStream.listen((connected) {
       if (!mounted) return;
-      setState(() => _connected = connected);
+      setState(() {
+        _connected = connected;
+        if (!connected &&
+            _mode == AcquisitionMode.hardware &&
+            _step == CollectionStep.running) {
+          _connectionMessage =
+              'A conexão foi interrompida. Encerre a coleta e conecte novamente.';
+        }
+      });
     });
     _errorSubscription = _bridge.errorStream.listen((message) {
       if (!mounted) return;
@@ -228,6 +240,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   double? get _displayMeditationMean =>
       (_qualityScore ?? 0) >= 60 ? _meditationMean : null;
+
+  AsrsScreenerResult? get _asrsResult {
+    if (_asrsAnswers.any((answer) => answer == null)) return null;
+    return AsrsScreener6.score(_asrsAnswers.whereType<AsrsResponse>());
+  }
 
   void _chooseDemonstration() {
     setState(() {
@@ -413,6 +430,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _readings.clear();
       _startedAt = null;
       _endedAt = null;
+      _asrsAnswers.fillRange(0, _asrsAnswers.length, null);
       _exportMessage = null;
       _connectionMessage = null;
     });
@@ -422,6 +440,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final startedAt = _startedAt;
     final endedAt = _endedAt;
     if (startedAt == null || endedAt == null) return null;
+    final asrs = _asrsResult;
     return GuidedCollectionReportData(
       startedAt: startedAt,
       endedAt: endedAt,
@@ -433,6 +452,9 @@ class _HomeScreenState extends State<HomeScreen> {
       readingCount: _readings.length,
       attentionMean: _displayAttentionMean,
       meditationMean: _displayMeditationMean,
+      asrsScore: asrs?.total,
+      asrsLabel: asrs?.label,
+      asrsGuidance: asrs?.guidance,
     );
   }
 
@@ -508,6 +530,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   CollectionStep.instructions => _instructionsView(),
                   CollectionStep.running => _runningView(),
                   CollectionStep.result => _resultView(),
+                  CollectionStep.screening => _screeningView(),
                 },
               ),
             ),
@@ -780,6 +803,14 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
+        if (_mode == AcquisitionMode.hardware && !_connected) ...[
+          const SizedBox(height: 14),
+          _Notice(
+            icon: Icons.bluetooth_disabled_rounded,
+            text: _connectionMessage ??
+                'A conexão foi interrompida. Encerre a coleta e conecte novamente.',
+          ),
+        ],
         const SizedBox(height: 16),
         OutlinedButton.icon(
           onPressed: _finishCollection,
@@ -792,6 +823,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _resultView() {
     final score = _qualityScore;
+    final asrs = _asrsResult;
     return Column(
       key: const ValueKey('result'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -867,10 +899,58 @@ class _HomeScreenState extends State<HomeScreen> {
               'A nota do velocímetro é da coleta, não da pessoa. Os dois índices são cálculos proprietários do fabricante e não avaliam saúde ou TDAH.',
         ),
         const SizedBox(height: 18),
+        if (asrs == null)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(
+                        Icons.fact_check_outlined,
+                        color: Color(0xFF8BBEFF),
+                      ),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Rastreio ASRS para adultos',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Para pessoas de 18 anos ou mais: responda seis perguntas '
+                    'sobre os últimos 6 meses. O resultado vem somente das respostas e '
+                    'fica separado do BrainLink.',
+                    style: TextStyle(color: Color(0xFFAAB8CA), height: 1.4),
+                  ),
+                  const SizedBox(height: 14),
+                  FilledButton.icon(
+                    onPressed: () =>
+                        setState(() => _step = CollectionStep.screening),
+                    icon: const Icon(Icons.checklist_rounded),
+                    label: const Text('Responder 6 perguntas'),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          _AsrsResultCard(result: asrs),
+        const SizedBox(height: 18),
         FilledButton.icon(
           onPressed: _export,
           icon: const Icon(Icons.ios_share_rounded),
-          label: const Text('Exportar resultado'),
+          label: Text(asrs == null
+              ? 'Exportar resultado da coleta'
+              : 'Exportar os dois resultados'),
         ),
         const SizedBox(height: 10),
         OutlinedButton.icon(
@@ -879,6 +959,7 @@ class _HomeScreenState extends State<HomeScreen> {
             _readings.clear();
             _startedAt = null;
             _endedAt = null;
+            _asrsAnswers.fillRange(0, _asrsAnswers.length, null);
             _exportMessage = null;
           }),
           icon: const Icon(Icons.replay_rounded),
@@ -892,6 +973,124 @@ class _HomeScreenState extends State<HomeScreen> {
             style: const TextStyle(color: Color(0xFFAAB8CA)),
           ),
         ],
+      ],
+    );
+  }
+
+  Widget _screeningView() {
+    final answered = _asrsAnswers.whereType<AsrsResponse>().length;
+    final result = _asrsResult;
+    return Column(
+      key: const ValueKey('screening'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _StepHeader(
+          eyebrow: 'RASTREIO ASRS V1.1',
+          title: 'Seis perguntas para adultos',
+          subtitle:
+              'Assinale a alternativa que melhor descreve os últimos 6 meses.',
+        ),
+        const SizedBox(height: 14),
+        const _Notice(
+          icon: Icons.call_split_rounded,
+          text:
+              'Etapa destinada a pessoas com 18 anos ou mais. A pontuação usa apenas estas respostas e não é combinada com o EEG.',
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: LinearProgressIndicator(
+                value: answered / AsrsScreener6.itemCount,
+                minHeight: 7,
+                borderRadius: BorderRadius.circular(8),
+                backgroundColor: const Color(0xFF26354A),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              '$answered de ${AsrsScreener6.itemCount}',
+              style: const TextStyle(
+                color: Color(0xFFAAB8CA),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        for (var index = 0;
+            index < AsrsScreener6.questions.length;
+            index++) ...[
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'PERGUNTA ${index + 1} DE ${AsrsScreener6.itemCount}',
+                    style: const TextStyle(
+                      color: Color(0xFF8BBEFF),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    AsrsScreener6.questions[index],
+                    style: const TextStyle(
+                      fontSize: 16,
+                      height: 1.4,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  DropdownButtonFormField<AsrsResponse>(
+                    key: ValueKey('asrs_answer_$index'),
+                    initialValue: _asrsAnswers[index],
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Resposta',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      for (final response in AsrsResponse.values)
+                        DropdownMenuItem(
+                          value: response,
+                          child: Text(response.label),
+                        ),
+                    ],
+                    onChanged: (response) {
+                      if (response == null) return;
+                      setState(() => _asrsAnswers[index] = response);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
+        const Text(
+          AsrsScreener6.attribution,
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Color(0xFF8493A6), fontSize: 11, height: 1.4),
+        ),
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          onPressed: result == null
+              ? null
+              : () => setState(() => _step = CollectionStep.result),
+          icon: const Icon(Icons.speed_rounded),
+          label: const Text('Concluir e ver os dois resultados'),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: () => setState(() => _step = CollectionStep.result),
+          icon: const Icon(Icons.arrow_back_rounded),
+          label: const Text('Voltar ao resultado da coleta'),
+        ),
       ],
     );
   }
@@ -1123,6 +1322,85 @@ class _MetricCard extends StatelessWidget {
                 color: Color(0xFFAAB8CA),
                 fontSize: 12,
                 height: 1.25,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AsrsResultCard extends StatelessWidget {
+  const _AsrsResultCard({required this.result});
+
+  final AsrsScreenerResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = result.reachedScreeningCutoff
+        ? const Color(0xFFFFC45C)
+        : const Color(0xFF7DB3FF);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const _Eyebrow('RESULTADO DAS RESPOSTAS · ASRS V1.1'),
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '${result.total}',
+                  style: TextStyle(
+                    color: accent,
+                    fontSize: 48,
+                    height: 1,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.only(left: 5, bottom: 4),
+                  child: Text(
+                    'de 24',
+                    style: TextStyle(color: Color(0xFFAAB8CA)),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            LinearProgressIndicator(
+              value: result.total / AsrsScreener6.maximumScore,
+              minHeight: 8,
+              borderRadius: BorderRadius.circular(8),
+              color: accent,
+              backgroundColor: const Color(0xFF26354A),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              result.label,
+              style: TextStyle(
+                color: accent,
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              result.guidance,
+              style: const TextStyle(color: Color(0xFFD0DCE9), height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Ponto de corte da pontuação atualizada: 14. O ASRS é um '
+              'rastreio para adultos, não uma conclusão clínica. O resultado '
+              'não usa dados do BrainLink.',
+              style: TextStyle(
+                color: Color(0xFFAAB8CA),
+                fontSize: 12,
+                height: 1.4,
               ),
             ),
           ],

@@ -314,7 +314,7 @@ garante que o projeto tenha entrega mesmo se a Frente 3 der resultado negativo.
 
 ### Poderemos
 
-- "Sua pontuação de rastreio na ASRS v1.1 6Q foi X de 6. Converse com um profissional de saúde se houver preocupação."
+- "Sua pontuação de rastreio na ASRS v1.1 6Q foi X de 24. Este rastreio não confirma TDAH; converse com um profissional se houver dificuldade no dia a dia."
 - "Seu expoente aperiódico nesta sessão foi 1,42; sua mediana pessoal é 1,51."
 - "Seu pico alfa está em 10,1 Hz."
 - "Sua atenção medida variou assim nos últimos 30 dias."

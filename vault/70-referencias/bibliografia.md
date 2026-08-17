@@ -152,8 +152,10 @@ Self-Report Scales (ASRS)* — distribuição e licenças atuais; rastreador ASR
 v1.1 de 6 perguntas em português do Brasil.
 https://www.hcp.med.harvard.edu/ncs/asrs.php
 https://www.hcp.med.harvard.edu/ncs/ftpdir/adhd/6Q_Portuguese%20%28for%20Brazil%29_final.pdf
+https://www.hcp.med.harvard.edu/ncs/ftpdir/adhd/ASRS_v1.1_screener%286Q%29_scoring_update.pdf
 → Sustenta [[escalas-validadas]]: 6Q livre de permissão formal com atribuição;
-18Q sujeita a solicitação de permissão; texto e algoritmo não podem ser alterados.
+18Q sujeita a solicitação de permissão; texto PT-BR preservado e regra oficial
+atualizada de 0–24 com corte em 14.
 
 ## Neurofeedback
 

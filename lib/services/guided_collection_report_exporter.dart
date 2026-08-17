@@ -11,6 +11,9 @@ class GuidedCollectionReportData {
     required this.readingCount,
     this.attentionMean,
     this.meditationMean,
+    this.asrsScore,
+    this.asrsLabel,
+    this.asrsGuidance,
   });
 
   final DateTime startedAt;
@@ -21,6 +24,9 @@ class GuidedCollectionReportData {
   final int readingCount;
   final double? attentionMean;
   final double? meditationMean;
+  final int? asrsScore;
+  final String? asrsLabel;
+  final String? asrsGuidance;
 }
 
 /// Exporta a tela final em formatos autocontidos e fáceis de compartilhar.
@@ -48,6 +54,7 @@ class GuidedCollectionReportExporter {
     .number{font-size:64px;line-height:1;color:$color;font-weight:800}.label{color:$color;font-size:21px;font-weight:750}
     .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.item{padding:16px;border:1px solid #dbe3ec;border-radius:12px}
     .item span{display:block;color:#627086;font-size:13px}.notice{margin-top:26px;padding:15px;border-left:4px solid #315f8c;background:#f0f5fa}
+    .asrs{margin-top:26px;padding:22px;border:1px solid #dbe3ec;border-radius:16px}.asrs h2{margin:0 0 6px}.asrs-score{font-size:38px;font-weight:800;color:#315f8c}
     @media(max-width:560px){main{padding:24px}.grid{grid-template-columns:1fr}}
   </style>
 </head><body><main>
@@ -61,6 +68,7 @@ class GuidedCollectionReportExporter {
     ${_item('Relaxamento do aparelho', _number(data.meditationMean))}
   </div>
   <p class="notice">A nota avalia contato e continuidade do sinal durante a coleta. Os demais valores são índices proprietários do fabricante. Eles não avaliam saúde, TDAH ou capacidade da pessoa.</p>
+  ${_asrsHtml(data)}
 </main></body></html>''';
   }
 
@@ -76,6 +84,7 @@ Atenção do aparelho: ${_number(data.attentionMean)}
 Relaxamento do aparelho: ${_number(data.meditationMean)}
 
 A nota avalia contato e continuidade do sinal durante a coleta. Os demais valores são índices proprietários do fabricante. Eles não avaliam saúde, TDAH ou capacidade da pessoa.
+${_asrsText(data)}
 ''';
 
   Future<List<File>> export(
@@ -97,6 +106,40 @@ A nota avalia contato e continuidade do sinal durante a coleta. Os demais valore
 
   static String _item(String label, String value) =>
       '<div class="item"><span>${_escape(label)}</span><strong>${_escape(value)}</strong></div>';
+
+  static String _asrsHtml(GuidedCollectionReportData data) {
+    final score = data.asrsScore;
+    final label = data.asrsLabel;
+    final guidance = data.asrsGuidance;
+    if (score == null || label == null || guidance == null) return '';
+    return '''
+  <section class="asrs">
+    <h2>Rastreio ASRS v1.1 — adultos (18+)</h2>
+    <div class="muted">Resultado das respostas, separado dos dados do BrainLink</div>
+    <div class="asrs-score">$score de 24</div>
+    <strong>${_escape(label)}</strong>
+    <p>${_escape(guidance)}</p>
+    <p class="muted">ASRS v1.1 6-Question Screener © New York University and Ronald C. Kessler, PhD. All rights reserved. Derived from the WHO CIDI.</p>
+    <p class="muted">Pontuação 0–24: <a href="https://www.hcp.med.harvard.edu/ncs/ftpdir/adhd/ASRS_v1.1_screener%286Q%29_scoring_update.pdf">fonte oficial</a>.</p>
+  </section>''';
+  }
+
+  static String _asrsText(GuidedCollectionReportData data) {
+    final score = data.asrsScore;
+    final label = data.asrsLabel;
+    final guidance = data.asrsGuidance;
+    if (score == null || label == null || guidance == null) return '';
+    return '''
+
+RASTREIO ASRS V1.1 — ADULTOS (18+)
+Resultado das respostas, separado dos dados do BrainLink.
+Pontuação: $score/24 — $label
+$guidance
+
+ASRS v1.1 6-Question Screener © New York University and Ronald C. Kessler, PhD. All rights reserved. Derived from the WHO CIDI.
+Pontuação oficial: https://www.hcp.med.harvard.edu/ncs/ftpdir/adhd/ASRS_v1.1_screener%286Q%29_scoring_update.pdf
+''';
+  }
 
   static String _number(double? value) =>
       value == null ? 'Sem dado' : value.toStringAsFixed(1);

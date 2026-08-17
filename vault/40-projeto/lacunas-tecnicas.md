@@ -14,7 +14,9 @@ ordem de dificuldade.
 
 O recorte de interface foi simplificado para uma coleta guiada em uma tela:
 conexão, instruções, duas fases, velocímetro de qualidade e exportação. Diário,
-histórico e questionário não fazem parte do produto atual. O `CODE_RAW` é
+histórico e persistência não fazem parte do produto atual. O ASRS v1.1 6Q para
+adultos foi incluído depois do velocímetro, com pontuação e exportação separadas
+do EEG. O `CODE_RAW` é
 transportado em lotes e o filtro de 60 Hz está configurado. As lacunas abaixo
 continuam como roteiro de pesquisa, não como capacidades já exibidas.
 
@@ -25,7 +27,7 @@ continuam como roteiro de pesquisa, não como capacidades já exibidas.
 | Ligar a UI ao hardware real | ● | ● | ● | — |
 | Descoberta e pareamento Bluetooth | ● | ● | ● | — |
 | Persistência de sessões | ● | ● | ● | ○ |
-| Motor de questionário (SNAP-IV / ASRS) | ● | — | — | — |
+| Instrumentos adicionais (ex.: SNAP-IV) | ● | — | — | — |
 | Consumo de `CODE_RAW` | — | ● | ● | ○ |
 | FFT e densidade espectral | — | ● | ● | ● |
 | Ajuste aperiódico (specparam) | — | ● | ○ | ● |
@@ -79,12 +81,12 @@ O bloco de olhos fechados serve de teste de sanidade via efeito Berger:
 Um instantâneo de atenção não diz nada. O valor está no padrão ao longo de
 semanas. Ver [[ADR-003-persistencia-de-sessoes]].
 
-### Motor de questionário
-**Destrava:** o único instrumento validado do projeto.
+### Instrumentos de rastreio
 
-SNAP-IV e ASRS v1.1 6Q com pontuação correta. Ver [[escalas-validadas]]. A pontuação
-precisa ser conferida contra casos calculados à mão — errar aritmética no único
-componente validado seria o pior tipo de bug.
+O ASRS v1.1 6Q adulto já está implementado com a regra oficial 0–24, limites
+conferidos por testes e separação explícita do EEG. Ver [[escalas-validadas]].
+Adicionar SNAP-IV exigiria outro público, outro respondente e um fluxo próprio;
+não é lacuna do aplicativo adulto de demonstração.
 
 ## Bugs que bloqueavam
 

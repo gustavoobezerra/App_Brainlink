@@ -1,9 +1,10 @@
+import 'package:brainlink_app/data/models/asrs_screener_6.dart';
 import 'package:brainlink_app/ui/screens/home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('mantém um único fluxo sem abas, diário ou questionário',
+  testWidgets('mantém um único fluxo inicial sem abas ou diário',
       (tester) async {
     await tester.pumpWidget(const MaterialApp(home: HomeScreen()));
 
@@ -11,7 +12,7 @@ void main() {
     expect(find.text('Conectar BrainLink'), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
     expect(find.text('Diário'), findsNothing);
-    expect(find.text('ASRS'), findsNothing);
+    expect(find.textContaining('ASRS'), findsNothing);
   });
 
   testWidgets('mostra instruções antes de iniciar', (tester) async {
@@ -77,12 +78,83 @@ void main() {
     expect(find.text('Resultado da coleta'), findsOneWidget);
     expect(find.text('Coleta boa'), findsOneWidget);
     expect(find.text('de 100'), findsOneWidget);
-    expect(find.text('Exportar resultado'), findsOneWidget);
+    expect(find.text('Exportar resultado da coleta'), findsOneWidget);
+    expect(find.text('Responder 6 perguntas'), findsOneWidget);
     expect(
       find.textContaining('nota do velocímetro é da coleta'),
       findsOneWidget,
     );
   });
+
+  testWidgets('mantém o ASRS separado do velocímetro e calcula 0 a 24',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: HomeScreen(
+          demonstrationPhaseDuration: Duration(seconds: 1),
+        ),
+      ),
+    );
+    await _reachDemonstrationResult(tester);
+
+    final screeningButton = find.text('Responder 6 perguntas');
+    await tester.scrollUntilVisible(
+      screeningButton,
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(screeningButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Seis perguntas para adultos'), findsOneWidget);
+    expect(find.textContaining('não é combinada com o EEG'), findsOneWidget);
+    expect(find.text(AsrsScreener6.questions.first), findsOneWidget);
+
+    for (var index = 0; index < AsrsScreener6.itemCount; index++) {
+      final field = find.byKey(ValueKey('asrs_answer_$index'));
+      await tester.scrollUntilVisible(
+        field,
+        450,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(AsrsResponse.often.label).last);
+      await tester.pumpAndSettle();
+    }
+
+    final finishButton = find.text('Concluir e ver os dois resultados');
+    await tester.scrollUntilVisible(
+      finishButton,
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(finishButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Coleta boa'), findsOneWidget);
+    expect(find.text('18'), findsOneWidget);
+    expect(find.text('de 24'), findsOneWidget);
+    expect(find.text('Faixa superior de rastreio'), findsOneWidget);
+    expect(find.textContaining('não confirma TDAH'), findsOneWidget);
+    expect(find.text('Exportar os dois resultados'), findsOneWidget);
+  });
+}
+
+Future<void> _reachDemonstrationResult(WidgetTester tester) async {
+  await tester.tap(find.text('Ver demonstração'));
+  await tester.pumpAndSettle();
+  final startButton = find.text('Começar demonstração');
+  await tester.scrollUntilVisible(
+    startButton,
+    500,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.tap(startButton);
+  await tester.pump();
+  await tester.pump(const Duration(seconds: 1));
+  await tester.pump(const Duration(seconds: 1));
+  await tester.pumpAndSettle();
 }
 
 class _FakeGateway implements DeviceDiscoveryGateway {

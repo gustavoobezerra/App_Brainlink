@@ -3,7 +3,8 @@
 Aplicativo Android de uma única tela para realizar uma coleta guiada com o
 BrainLink Lite. A pessoa escolhe **Ver demonstração** ou **Conectar BrainLink**,
 lê as instruções, acompanha o teste e recebe um resultado simples em formato de
-velocímetro.
+velocímetro. Depois, adultos podem responder ao rastreio ASRS v1.1 de seis
+perguntas, sem misturá-lo aos dados do aparelho.
 
 > A nota de 0 a 100 representa somente a qualidade da coleta: contato do sensor
 > e continuidade dos dados. Ela não avalia saúde, TDAH ou capacidade da pessoa.
@@ -19,7 +20,9 @@ Olhos abertos → olhos fechados
           ↓
 Velocímetro + dados do aparelho
           ↓
-Exportar ou repetir
+ASRS v1.1 6Q (adultos 18+)
+          ↓
+Resultados separados → exportar ou repetir
 ```
 
 - **Demonstração:** duas etapas de 8 segundos, com dados simulados claramente
@@ -31,7 +34,12 @@ Exportar ou repetir
   fabricante, sem classificação da pessoa.
 - Em coleta ruim ou sem dados, esses índices ficam ocultos e o app orienta a
   reposicionar o sensor.
-- O resultado pode ser exportado em HTML e TXT e compartilhado pelo Android.
+- O ASRS gera uma segunda pontuação, de 0 a 24, calculada somente a partir das
+  seis respostas; o ponto de corte de rastreio é 14.
+- O ASRS não confirma nem exclui TDAH e é apresentado em um cartão separado da
+  qualidade do EEG.
+- Os resultados podem ser exportados em HTML e TXT e compartilhados pelo
+  Android.
 
 ## Usar com o BrainLink
 
@@ -52,13 +60,20 @@ Se o velocímetro indicar coleta ruim, limpe e seque os pontos de contato,
 reposicione o sensor e o clipe e repita. Piscadas frequentes, fala, movimento,
 cabelo, suor ou cosméticos entre metal e pele podem degradar o sinal.
 
+## Instalar o APK no celular
+
+O arquivo entregue para instalação é `ProjetoBrainLink.apk`, na Área de
+Trabalho. Envie esse arquivo ao Android, abra-o no celular e autorize a
+instalação de apps dessa origem quando o sistema solicitar. Uma versão anterior
+pode ser atualizada por cima porque o identificador do aplicativo foi mantido.
+
 ## Arquitetura
 
 ```text
 lib/
-├── data/models/       # EEG consolidado, raw e dispositivo Bluetooth
+├── data/models/       # EEG, Bluetooth e pontuação ASRS
 ├── native/            # contrato Flutter ↔ Android
-├── services/          # demonstração e exportação do resultado
+├── services/          # exportação dos resultados
 └── ui/screens/        # fluxo visual único
 
 android/app/src/main/java/com/brainlink/app/
@@ -87,8 +102,14 @@ O APK é gerado em `build/app/outputs/flutter-apk/app-release.apk`.
 - arquivos são criados somente quando a pessoa toca em exportar;
 - o headset possui um canal frontal sensível a contato, piscadas e movimento;
 - os índices do fabricante não possuem interpretação clínica;
+- o ASRS v1.1 é um rastreio de sintomas para adultos, não uma conclusão
+  clínica, e nunca é combinado ao EEG;
 - a integração final deve ser exercitada com o BrainLink Lite físico e o
   Android que serão usados na apresentação.
+
+Texto PT-BR oficial e pontuação atualizada do ASRS:
+[instrumento de seis perguntas](https://www.hcp.med.harvard.edu/ncs/ftpdir/adhd/6Q_Portuguese%20%28for%20Brazil%29_final.pdf)
+e [regra 0–24](https://www.hcp.med.harvard.edu/ncs/ftpdir/adhd/ASRS_v1.1_screener%286Q%29_scoring_update.pdf).
 
 O SDK proprietário `libStreamSDK_v1.3.2.jar` deve ser usado e distribuído de
 acordo com os termos de seu fabricante.

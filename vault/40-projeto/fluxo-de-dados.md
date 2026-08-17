@@ -17,8 +17,11 @@ flowchart TD
     E --> F["Pontua contato + continuidade"]
     F --> G["Velocímetro<br/>boa / aceitável / ruim"]
     E --> H["Atenção e relaxamento<br/>saídas do fabricante"]
+    G -. "etapa seguinte, sem fusão" .-> Q["ASRS v1.1 6Q<br/>respostas do adulto"]
+    Q --> S["Pontuação 0–24<br/>corte 14"]
     G --> I["HTML/TXT sob solicitação"]
     H --> I
+    S --> I
 ```
 
 ## Regras
@@ -30,6 +33,9 @@ flowchart TD
   leituras; não usa attention, meditation, bandas ou ASRS.
 - Sem `poorSignal`, o app mostra ausência de dados em vez de inventar zero.
 - eSense aparece de forma descritiva e separado da nota de coleta.
+- O ASRS usa somente as seis respostas, apresenta quatro faixas neutras e nunca
+  recebe EEG, eSense, qualidade de contato ou modo demonstração em sua soma.
+- A exportação mantém qualidade da coleta e rastreio em seções distintas.
 - `CODE_RAW` é transportado em lotes, mas não alimenta o velocímetro atual.
 - Não há histórico, conta ou envio automático. A exportação é voluntária.
 

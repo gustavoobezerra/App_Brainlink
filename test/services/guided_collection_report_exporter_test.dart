@@ -40,4 +40,30 @@ void main() {
     expect(files.first.path, endsWith('.html'));
     expect(files.last.path, endsWith('.txt'));
   });
+
+  test('inclui o ASRS em seção separada quando ele foi respondido', () {
+    final complete = GuidedCollectionReportData(
+      startedAt: data.startedAt,
+      endedAt: data.endedAt,
+      source: data.source,
+      qualityScore: data.qualityScore,
+      qualityLabel: data.qualityLabel,
+      readingCount: data.readingCount,
+      attentionMean: data.attentionMean,
+      meditationMean: data.meditationMean,
+      asrsScore: 18,
+      asrsLabel: 'Faixa superior de rastreio',
+      asrsGuidance:
+          'Suas respostas ficaram na faixa que merece avaliação profissional. Este rastreio não confirma TDAH.',
+    );
+
+    final html = exporter.buildHtml(complete);
+    final text = exporter.buildText(complete);
+
+    expect(html, contains('18 de 24'));
+    expect(html, contains('separado dos dados do BrainLink'));
+    expect(text, contains('Pontuação: 18/24'));
+    expect(text, contains('não confirma TDAH'));
+    expect(text, contains('ASRS_v1.1_screener%286Q%29_scoring_update.pdf'));
+  });
 }
