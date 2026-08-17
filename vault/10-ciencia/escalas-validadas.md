@@ -45,7 +45,7 @@ iniciativa de entrevistas diagnósticas da **Organização Mundial da Saúde**.
 O instrumento não pode ser adaptado: as cinco opções de resposta e o texto
 precisam permanecer intactos. O aplicativo usa a regra alternativa publicada
 pelos responsáveis pelo ASRS em 28/02/2024: Nunca = 0, Raramente = 1, Algumas
-vezes = 2, Freqüentemente = 3 e Muito freqüentemente = 4. A soma vai de 0 a 24,
+vezes = 2, Frequentemente = 3 e Muito frequentemente = 4. A soma vai de 0 a 24,
 com ponto de corte de rastreio em 14.
 
 | Pontuação | Estrato oficial | Rótulo neutro no app |

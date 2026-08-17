@@ -3,8 +3,8 @@ enum AsrsResponse {
   never(0, 'Nunca'),
   rarely(1, 'Raramente'),
   sometimes(2, 'Algumas vezes'),
-  often(3, 'Freqüentemente'),
-  veryOften(4, 'Muito freqüentemente');
+  often(3, 'Frequentemente'),
+  veryOften(4, 'Muito frequentemente');
 
   const AsrsResponse(this.points, this.label);
 
@@ -67,19 +67,19 @@ abstract final class AsrsScreener6 {
 
   /// O texto e a ortografia abaixo reproduzem o instrumento PT-BR oficial.
   static const List<String> questions = [
-    'Com que freqüência você sente dificuldade para finalizar os últimos '
+    'Com que frequência você sente dificuldade para finalizar os últimos '
         'detalhes de uma tarefa, depois de já ter feito as partes mais '
         'complicadas?',
-    'Com que freqüência você sente dificuldade para manter as coisas em '
+    'Com que frequência você sente dificuldade para manter as coisas em '
         'ordem quando precisa realizar uma tarefa que exige organização?',
-    'Com que freqüência você tem problemas para se lembrar de compromissos '
+    'Com que frequência você tem problemas para se lembrar de compromissos '
         'ou obrigações?',
     'Quando precisa realizar uma tarefa que exige muita concentração, com '
-        'que freqüência você evita ou atrasa o seu início?',
-    'Com que freqüência você fica se mexendo na cadeira ou balançando as '
+        'que frequência você evita ou atrasa o seu início?',
+    'Com que frequência você fica se mexendo na cadeira ou balançando as '
         'mãos ou os pés quando precisa ficar sentado(a) durante um longo '
         'período de tempo?',
-    'Com que freqüência você se sente excessivamente ativo(a) e compelido(a) '
+    'Com que frequência você se sente excessivamente ativo(a) e compelido(a) '
         'a fazer coisas, como se fosse conduzido(a) por um motor?',
   ];
 

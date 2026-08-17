@@ -7,19 +7,19 @@ void main() {
       expect(
         AsrsScreener6.questions,
         [
-          'Com que freqüência você sente dificuldade para finalizar os últimos '
+          'Com que frequência você sente dificuldade para finalizar os últimos '
               'detalhes de uma tarefa, depois de já ter feito as partes mais '
               'complicadas?',
-          'Com que freqüência você sente dificuldade para manter as coisas em '
+          'Com que frequência você sente dificuldade para manter as coisas em '
               'ordem quando precisa realizar uma tarefa que exige organização?',
-          'Com que freqüência você tem problemas para se lembrar de compromissos '
+          'Com que frequência você tem problemas para se lembrar de compromissos '
               'ou obrigações?',
           'Quando precisa realizar uma tarefa que exige muita concentração, com '
-              'que freqüência você evita ou atrasa o seu início?',
-          'Com que freqüência você fica se mexendo na cadeira ou balançando as '
+              'que frequência você evita ou atrasa o seu início?',
+          'Com que frequência você fica se mexendo na cadeira ou balançando as '
               'mãos ou os pés quando precisa ficar sentado(a) durante um longo '
               'período de tempo?',
-          'Com que freqüência você se sente excessivamente ativo(a) e compelido(a) '
+          'Com que frequência você se sente excessivamente ativo(a) e compelido(a) '
               'a fazer coisas, como se fosse conduzido(a) por um motor?',
         ],
       );
@@ -29,8 +29,8 @@ void main() {
           'Nunca',
           'Raramente',
           'Algumas vezes',
-          'Freqüentemente',
-          'Muito freqüentemente',
+          'Frequentemente',
+          'Muito frequentemente',
         ],
       );
     });

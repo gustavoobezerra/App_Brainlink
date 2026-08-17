@@ -99,7 +99,7 @@ void main() {
         for (final question in AsrsScreener6.questions)
           GuidedAsrsAnswer(
             question: question,
-            response: 'Freqüentemente',
+            response: 'Frequentemente',
             points: 3,
           ),
       ],
@@ -119,7 +119,7 @@ void main() {
     expect(html, contains(AsrsScreener6.questions.first));
     expect(html, contains(AsrsScreener6.questions.last));
     expect(RegExp('<li>').allMatches(html), hasLength(6));
-    expect(html, contains('Freqüentemente — 3 pontos'));
+    expect(html, contains('Frequentemente — 3 pontos'));
     expect(html, contains('Resumo para levar ao médico'));
     expect(text, contains('Pontuação: 18/24'));
     expect(text, contains('possibilidade aumentada de TDAH'));
