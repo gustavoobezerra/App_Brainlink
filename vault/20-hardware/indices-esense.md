@@ -2,7 +2,7 @@
 titulo: Índices eSense (attention e meditation)
 tags: [hardware/brainlink, evidencia/contestada, risco/medio]
 status: contestado
-atualizado: 2026-08-13
+atualizado: 2026-08-17
 ---
 
 # Índices eSense
@@ -13,7 +13,7 @@ Dois valores de 0 a 100 calculados pelo chip NeuroSky e entregues a ~1 Hz:
 `attention` e `meditation`.
 
 São mostrados como dois dados secundários ao final da coleta, explicitamente
-rotulados como saídas proprietárias do aparelho. O velocímetro principal usa
+rotulados como saídas proprietárias do aparelho. O indicador principal usa
 somente contato e continuidade do sinal.
 
 ## O problema

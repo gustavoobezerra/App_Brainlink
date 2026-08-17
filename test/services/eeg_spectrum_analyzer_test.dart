@@ -24,12 +24,19 @@ void main() {
       eyesClosed: _sineBatches(10, amplitudeMicrovolts: 20),
       minimumEpochsPerPhase: 1,
     );
+    final historicalPattern = analyzer.analyze(
+      eyesOpen: _sineBatches(6),
+      eyesClosed: _sineBatches(6),
+      minimumEpochsPerPhase: 1,
+    );
 
     expect(theta.isUsable, isTrue);
     expect(theta.eyesOpen.bands.theta, greaterThan(95));
     expect(theta.eyesClosed.bands.alpha, greaterThan(95));
     expect(alphaChange.alphaChangePercent, greaterThan(1000));
     expect(beta.eyesOpen.bands.beta, greaterThan(95));
+    expect(historicalPattern.thetaAboveBetaInBothPhases, isTrue);
+    expect(beta.thetaAboveBetaInBothPhases, isFalse);
   });
 
   test('rejeita contato ruim, perdas e saltos de sequência', () {
@@ -58,6 +65,7 @@ void main() {
     );
 
     expect(poorContact.isUsable, isFalse);
+    expect(poorContact.thetaAboveBetaInBothPhases, isNull);
     expect(poorContact.eyesOpen.acceptedEpochs, 0);
     expect(dropped.eyesOpen.rejectedEpochs, greaterThan(0));
     expect(gap.eyesOpen.rejectedEpochs, greaterThan(0));

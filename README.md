@@ -2,10 +2,11 @@
 
 Aplicativo Android de uma única tela para realizar uma coleta guiada com o
 BrainLink Lite. A pessoa escolhe **Ver demonstração** ou **Conectar BrainLink**,
-lê as instruções, acompanha o teste e recebe um resultado simples em formato de
-velocímetro, com o traçado ao vivo e uma comparação descritiva das bandas entre
-olhos abertos e fechados. Depois, adultos podem responder ao rastreio ASRS v1.1
-de seis perguntas, sem misturá-lo aos dados do aparelho.
+lê as instruções, acompanha o teste e recebe um indicador visual da qualidade,
+com o traçado ao vivo e uma comparação descritiva das bandas entre olhos abertos
+e fechados. Depois, adultos podem responder ao rastreio ASRS v1.1 de seis
+perguntas. Respostas e resumo do EEG ficam juntos no relatório, com cálculos
+separados.
 
 > A nota de 0 a 100 representa somente a qualidade da coleta: contato do sensor
 > e continuidade dos dados. Ela não avalia saúde, TDAH ou capacidade da pessoa.
@@ -19,7 +20,7 @@ Instruções de uso
           ↓
 Olhos abertos → olhos fechados
           ↓
-Velocímetro + traçado e bandas
+Indicador visual + traçado e bandas
           ↓
 ASRS v1.1 6Q (adultos 18+)
           ↓
@@ -39,14 +40,19 @@ Resultados separados → exportar ou repetir
   final, mostra delta, theta, alfa e beta apenas quando há trechos limpos
   suficientes; contato ruim, perdas, sinal plano e amplitudes compatíveis com
   artefato invalidam os trechos.
-- As bandas descrevem somente esta sessão. Elas não classificam TDAH e ficam
-  marcadas como **NÃO ENTRA NO RASTREIO DE TDAH**.
+- As bandas descrevem somente esta sessão e não classificam TDAH.
+- O app informa condicionalmente se theta ficou maior que beta nas duas etapas,
+  o padrão histórico mais pesquisado. Esse estado é descritivo: estudos atuais
+  não sustentam usá-lo como possibilidade individual de TDAH.
 - O ASRS gera uma segunda pontuação, de 0 a 24, calculada somente a partir das
   seis respostas; o ponto de corte de rastreio é 14.
 - A partir de 14, o app mostra **Possibilidade aumentada no ASRS**; abaixo de
   14, mostra **Ponto de corte não atingido**. Não calcula percentual de chance.
 - O cartão do ASRS exibe **NÃO É DIAGNÓSTICO**. O resultado não confirma nem
-  exclui TDAH e permanece separado do EEG.
+  exclui TDAH; seu cálculo permanece separado do EEG.
+- Ao concluir o ASRS, um resumo reúne ponto de corte e estado das ondas para
+  levar ao médico. A exportação lista cada pergunta, resposta e pontos; a
+  possibilidade continua calculada somente pelas respostas.
 - Os resultados podem ser exportados em HTML e TXT e compartilhados pelo
   Android.
 
@@ -65,7 +71,7 @@ Resultados separados → exportar ou repetir
 6. Inicie: fique 1 minuto com os olhos abertos olhando para um ponto fixo. Ao
    aviso sonoro/tátil, feche os olhos por mais 1 minuto, sem apertá-los.
 
-Se o velocímetro indicar coleta ruim, limpe e seque os pontos de contato,
+Se o indicador mostrar coleta ruim, limpe e seque os pontos de contato,
 reposicione o sensor e o clipe e repita. Piscadas frequentes, fala, movimento,
 cabelo, suor ou cosméticos entre metal e pele podem degradar o sinal.
 

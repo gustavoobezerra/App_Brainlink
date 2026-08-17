@@ -54,6 +54,11 @@ sobre o que ela avisa.
    com "NÃO É DIAGNÓSTICO" no mesmo cartão. EEG, bandas, eSense e qualidade da
    coleta não entram no cálculo nem corroboram o resultado.
 
+   Respostas e resumo do EEG podem ser registrados no mesmo relatório, desde
+   que as seções revelem que os cálculos permanecem independentes. A observação
+   condicional theta > beta pode aparecer como contexto histórico, nunca como
+   possibilidade individual.
+
 A lista de termos proibidos e permitidos vive em [[linguagem-permitida]], que é
 fonte única de verdade e prevalece sobre qualquer outro documento em caso de
 conflito.

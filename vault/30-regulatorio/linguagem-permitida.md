@@ -47,7 +47,8 @@ diagnóstica:
 | "tendência ao longo dos últimos 30 dias" | Série temporal, sem interpretação |
 | "sua pontuação na escala SNAP-IV foi X" | Escore bruto de instrumento validado |
 | "esta pontuação sugere conversar com um profissional" | Encaminhamento, não conclusão |
-| "possibilidade de TDAH no rastreio ASRS" | Somente a partir do ASRS oficial, sem EEG, sem percentual e com "NÃO É DIAGNÓSTICO" adjacente |
+| "possibilidade de TDAH no rastreio ASRS" | Somente pelo cálculo do ASRS oficial, sem EEG na decisão, sem percentual e com "NÃO É DIAGNÓSTICO" adjacente |
+| "theta maior que beta foi observado nas duas etapas" | Estado descritivo condicional, junto do aviso de que não calcula possibilidade individual |
 | "este resultado não é diagnóstico" | Nega explicitamente finalidade diagnóstica |
 | "registro para levar à consulta" | Posiciona como insumo, não resultado |
 | "índice do fabricante (algoritmo proprietário)" | Honesto sobre [[indices-esense]] |
@@ -81,6 +82,10 @@ zeros, e a interface mostra "0" — indistinguível de um zero real medido. Ver
 desde que mostre no mesmo cartão que não é diagnóstico. EEG, eSense, bandas,
 qualidade de contato e modo demonstração não entram nessa decisão. Abaixo do
 corte, a redação é "ponto de corte não atingido", nunca "sem TDAH".
+
+Registrar respostas e resumo do EEG no mesmo arquivo é permitido e desejado.
+"Juntos no relatório" não significa fundir os valores: cada seção preserva seu
+método, e a mensagem de possibilidade continua vindo apenas do ASRS.
 
 ## Como isto vira garantia e não intenção
 

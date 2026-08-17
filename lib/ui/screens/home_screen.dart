@@ -556,6 +556,16 @@ class _HomeScreenState extends State<HomeScreen> {
       asrsLabel: asrs?.possibilityLabel,
       asrsBandLabel: asrs?.label,
       asrsGuidance: asrs?.guidance,
+      asrsAnswers: asrs == null
+          ? const []
+          : [
+              for (var index = 0; index < AsrsScreener6.itemCount; index++)
+                GuidedAsrsAnswer(
+                  question: AsrsScreener6.questions[index],
+                  response: _asrsAnswers[index]!.label,
+                  points: _asrsAnswers[index]!.points,
+                ),
+            ],
     );
   }
 
@@ -676,12 +686,6 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 16),
           _hardwarePanel(),
         ],
-        const SizedBox(height: 18),
-        const _Notice(
-          icon: Icons.verified_user_outlined,
-          text:
-              'A nota final avalia a qualidade da coleta. Ela não avalia saúde, TDAH ou capacidade da pessoa.',
-        ),
       ],
     );
   }
@@ -939,7 +943,7 @@ class _HomeScreenState extends State<HomeScreen> {
               : 'RESULTADO SIMULADO',
           title: 'Resultado da coleta',
           subtitle:
-              'O velocímetro resume contato e continuidade do sinal recebido.',
+              'Indicador visual de contato e continuidade do sinal recebido.',
         ),
         const SizedBox(height: 16),
         Card(
@@ -998,59 +1002,22 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         const SizedBox(height: 14),
-        _SpectrumResultCard(analysis: _spectrumAnalysis),
-        const SizedBox(height: 14),
-        const _Notice(
-          icon: Icons.info_outline_rounded,
-          text:
-              'A nota do velocímetro é da coleta, não da pessoa. Os dois índices são cálculos proprietários do fabricante e não avaliam saúde ou TDAH.',
-        ),
-        const SizedBox(height: 18),
         if (asrs == null)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(
-                        Icons.fact_check_outlined,
-                        color: Color(0xFF8BBEFF),
-                      ),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Rastreio ASRS para adultos',
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Para pessoas de 18 anos ou mais: responda seis perguntas '
-                    'sobre os últimos 6 meses. O resultado vem somente das respostas e '
-                    'fica separado do BrainLink.',
-                    style: TextStyle(color: Color(0xFFAAB8CA), height: 1.4),
-                  ),
-                  const SizedBox(height: 14),
-                  FilledButton.icon(
-                    onPressed: () =>
-                        setState(() => _step = CollectionStep.screening),
-                    icon: const Icon(Icons.checklist_rounded),
-                    label: const Text('Responder 6 perguntas'),
-                  ),
-                ],
-              ),
-            ),
+          _AsrsPromptCard(
+            isHardware: _mode == AcquisitionMode.hardware,
+            onPressed: () => setState(() => _step = CollectionStep.screening),
           )
         else
           _AsrsResultCard(result: asrs),
+        const SizedBox(height: 14),
+        _SpectrumResultCard(analysis: _spectrumAnalysis),
+        if (asrs != null) ...[
+          const SizedBox(height: 14),
+          _CombinedGuidanceCard(
+            result: asrs,
+            spectrum: _spectrumAnalysis,
+          ),
+        ],
         const SizedBox(height: 18),
         FilledButton.icon(
           onPressed: _export,
@@ -1102,7 +1069,7 @@ class _HomeScreenState extends State<HomeScreen> {
         const _Notice(
           icon: Icons.call_split_rounded,
           text:
-              'Etapa destinada a pessoas com 18 anos ou mais. Este rastreio não é diagnóstico. A pontuação usa apenas estas respostas e não é combinada com o EEG.',
+              'Etapa destinada a pessoas com 18 anos ou mais. As respostas e o resumo do EEG ficam registrados juntos no relatório. A pontuação ASRS usa somente as respostas.',
         ),
         const SizedBox(height: 16),
         Row(
@@ -1259,7 +1226,7 @@ class _Hero extends StatelessWidget {
           ),
           SizedBox(height: 10),
           Text(
-            'O app orienta cada etapa e mostra a qualidade da coleta em um velocímetro fácil de entender.',
+            'O app orienta cada etapa, mostra a qualidade da coleta e compara as ondas entre olhos abertos e fechados.',
             style: TextStyle(color: Color(0xFFD2E0EE), height: 1.45),
           ),
         ],
@@ -1533,26 +1500,8 @@ class _SpectrumResultCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF172A40),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Text(
-                  'NÃO ENTRA NO RASTREIO DE TDAH',
-                  style: TextStyle(
-                    color: Color(0xFFBFD7F3),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.6,
-                  ),
-                ),
-              ),
-            ),
+            const SizedBox(height: 14),
+            _HistoricalPatternCard(analysis: value),
             const SizedBox(height: 14),
             if (value == null || !value.isUsable) ...[
               const Icon(
@@ -1646,6 +1595,79 @@ class _SpectrumResultCard extends StatelessWidget {
   }
 }
 
+class _HistoricalPatternCard extends StatelessWidget {
+  const _HistoricalPatternCard({required this.analysis});
+
+  final EegSpectrumAnalysis? analysis;
+
+  @override
+  Widget build(BuildContext context) {
+    final observed = analysis?.thetaAboveBetaInBothPhases;
+    final status = switch (observed) {
+      true => 'THETA MAIOR QUE BETA NAS DUAS ETAPAS',
+      false => 'THETA MAIOR QUE BETA NÃO APARECEU NAS DUAS ETAPAS',
+      null => 'COMPARAÇÃO THETA/BETA INDISPONÍVEL',
+    };
+    final accent =
+        observed == true ? const Color(0xFFFFC45C) : const Color(0xFF8BBEFF);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: observed == true
+            ? const Color(0xFF241E16)
+            : const Color(0xFF111F30),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: observed == true
+              ? const Color(0xFF755B2D)
+              : const Color(0xFF304B69),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.science_outlined, size: 19, color: accent),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'PADRÃO HISTÓRICO PESQUISADO NO TDAH',
+                  style: TextStyle(
+                    color: accent,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.45,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 9),
+          Text(
+            status,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+              height: 1.25,
+            ),
+          ),
+          const SizedBox(height: 7),
+          const Text(
+            EegSpectrumAnalysis.historicalAdhdContext,
+            style: TextStyle(
+              color: Color(0xFFE0D6C5),
+              fontSize: 12,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _LegendDot extends StatelessWidget {
   const _LegendDot({required this.color, required this.label});
 
@@ -1724,15 +1746,25 @@ class _PowerBar extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: Container(
-              height: 9,
-              color: const Color(0xFF26354A),
-              alignment: Alignment.centerLeft,
-              child: FractionallySizedBox(
-                widthFactor: safeValue / 100,
-                child: ColoredBox(color: color),
+          child: LayoutBuilder(
+            builder: (context, constraints) => ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: SizedBox(
+                height: 9,
+                child: Stack(
+                  children: [
+                    const Positioned.fill(
+                      child: ColoredBox(color: Color(0xFF26354A)),
+                    ),
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: constraints.maxWidth * safeValue / 100,
+                      child: ColoredBox(color: color),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1806,6 +1838,66 @@ class _WaveformPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_WaveformPainter oldDelegate) => true;
+}
+
+class _AsrsPromptCard extends StatelessWidget {
+  const _AsrsPromptCard({required this.isHardware, required this.onPressed});
+
+  final bool isHardware;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF2B2517), Color(0xFF141F30)],
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const _Eyebrow('POSSIBILIDADE DE TDAH · RASTREIO ASRS V1.1'),
+            const SizedBox(height: 8),
+            Text(
+              isHardware
+                  ? 'Para completar o resultado do BrainLink, responda o questionário.'
+                  : 'Para completar a demonstração, responda o questionário.',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                height: 1.3,
+              ),
+            ),
+            const SizedBox(height: 9),
+            const Text(
+              'Isso torna o relatório mais útil para uma consulta: as seis '
+              'respostas e o resumo das ondas ficam registrados juntos. O ponto '
+              'de corte do ASRS usa somente as respostas.',
+              style: TextStyle(color: Color(0xFFD0DCE9), height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: _InlineBadge('NÃO É DIAGNÓSTICO'),
+            ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: onPressed,
+              icon: const Icon(Icons.checklist_rounded),
+              label: const Text('Responder 6 perguntas'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _AsrsResultCard extends StatelessWidget {
@@ -1903,8 +1995,8 @@ class _AsrsResultCard extends StatelessWidget {
             const SizedBox(height: 12),
             const Text(
               'Ponto de corte da pontuação atualizada: 14. O ASRS é um '
-              'rastreio para adultos. A possibilidade mostrada vem somente das '
-              'respostas e não usa dados do BrainLink.',
+              'rastreio para adultos. A possibilidade é calculada somente pelas '
+              'respostas; elas e o resumo do EEG ficam juntos na exportação.',
               style: TextStyle(
                 color: Color(0xFFAAB8CA),
                 fontSize: 12,
@@ -1913,6 +2005,125 @@ class _AsrsResultCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _CombinedGuidanceCard extends StatelessWidget {
+  const _CombinedGuidanceCard({
+    required this.result,
+    required this.spectrum,
+  });
+
+  final AsrsScreenerResult result;
+  final EegSpectrumAnalysis? spectrum;
+
+  @override
+  Widget build(BuildContext context) {
+    final pattern = spectrum?.thetaAboveBetaInBothPhases;
+    final reached = result.reachedScreeningCutoff;
+    final accent = reached ? const Color(0xFFFFC45C) : const Color(0xFF7DB3FF);
+    final patternLabel = switch (pattern) {
+      true => 'Theta maior que beta nas duas etapas',
+      false => 'Theta maior que beta não apareceu nas duas etapas',
+      null => 'Comparação theta/beta indisponível',
+    };
+    final guidance = switch ((reached, pattern)) {
+      (true, true) =>
+        'O ponto de corte do ASRS foi atingido e a combinação theta maior '
+            'que beta apareceu nas duas etapas. As ondas não confirmam TDAH, '
+            'mas o rastreio justifica procurar um médico para uma avaliação '
+            'clínica completa.',
+      (true, _) =>
+        'O ponto de corte do ASRS foi atingido. A ausência ou indisponibilidade '
+            'do padrão histórico nas ondas não exclui TDAH. Procure um médico '
+            'para uma avaliação clínica completa.',
+      (false, true) =>
+        'O ponto de corte do ASRS não foi atingido. A combinação theta maior '
+            'que beta também ocorre em pessoas sem TDAH e não altera esse '
+            'resultado. Se houver dificuldade no dia a dia, procure um médico.',
+      (false, _) =>
+        'O ponto de corte do ASRS não foi atingido, o que não exclui TDAH. '
+            'Se houver dificuldade no dia a dia, procure um médico.',
+    };
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const _Eyebrow('RESUMO PARA LEVAR AO MÉDICO'),
+            const SizedBox(height: 9),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: _InlineBadge('NÃO É DIAGNÓSTICO'),
+            ),
+            const SizedBox(height: 14),
+            _SummaryLine(
+              label: 'Questionário ASRS',
+              value: reached
+                  ? '${result.total}/24 · corte 14 atingido'
+                  : '${result.total}/24 · corte 14 não atingido',
+              color: accent,
+            ),
+            const SizedBox(height: 10),
+            _SummaryLine(
+              label: 'Ondas desta coleta',
+              value: patternLabel,
+              color: pattern == true
+                  ? const Color(0xFFFFC45C)
+                  : const Color(0xFF8BBEFF),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              guidance,
+              style: const TextStyle(
+                color: Color(0xFFD7E2EE),
+                fontWeight: FontWeight.w700,
+                height: 1.45,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SummaryLine extends StatelessWidget {
+  const _SummaryLine({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D1828),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF2A3A52)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(color: Color(0xFFAAB8CA), fontSize: 12),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            value,
+            style: TextStyle(color: color, fontWeight: FontWeight.w800),
+          ),
+        ],
       ),
     );
   }
@@ -1929,33 +2140,53 @@ class _QualityGauge extends StatelessWidget {
       label: score == null
           ? 'Qualidade da coleta sem dado'
           : 'Qualidade da coleta $score de 100',
-      child: SizedBox(
-        height: 205,
-        width: double.infinity,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Positioned.fill(child: CustomPaint(painter: _GaugePainter(score))),
-            Positioned(
-              bottom: 5,
-              child: Column(
-                children: [
-                  Text(
-                    score?.toString() ?? '—',
-                    style: const TextStyle(
-                      fontSize: 52,
-                      height: 1,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const Text(
-                    'de 100',
-                    style: TextStyle(color: Color(0xFFAAB8CA)),
-                  ),
-                ],
-              ),
+      child: Column(
+        children: [
+          SizedBox(
+            height: 205,
+            width: double.infinity,
+            child: CustomPaint(painter: _GaugePainter(score)),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            score?.toString() ?? '—',
+            style: const TextStyle(
+              fontSize: 52,
+              height: 1,
+              fontWeight: FontWeight.w900,
             ),
-          ],
+          ),
+          const Text(
+            'de 100',
+            style: TextStyle(color: Color(0xFFAAB8CA)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InlineBadge extends StatelessWidget {
+  const _InlineBadge(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF26354A),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF52647B)),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Color(0xFFD7E2EE),
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0.7,
         ),
       ),
     );

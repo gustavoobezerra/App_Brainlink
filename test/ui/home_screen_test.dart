@@ -18,6 +18,7 @@ void main() {
     expect(find.byType(NavigationBar), findsNothing);
     expect(find.text('Diário'), findsNothing);
     expect(find.textContaining('ASRS'), findsNothing);
+    expect(find.textContaining('não avalia saúde'), findsNothing);
   });
 
   testWidgets('mostra instruções antes de iniciar', (tester) async {
@@ -54,7 +55,7 @@ void main() {
     expect(find.text('Começar teste de 2 minutos'), findsOneWidget);
   });
 
-  testWidgets('guia as fases e apresenta velocímetro com resultado',
+  testWidgets('guia as fases e apresenta indicador visual com resultado',
       (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
@@ -84,19 +85,32 @@ void main() {
     expect(find.text('Resultado da coleta'), findsOneWidget);
     expect(find.text('Coleta boa'), findsOneWidget);
     expect(find.text('de 100'), findsOneWidget);
-    expect(find.text('Exportar resultado da coleta'), findsOneWidget);
-    expect(find.text('Responder 6 perguntas'), findsOneWidget);
-    expect(find.text('Ondas observadas nesta coleta'), findsOneWidget);
-    expect(find.text('NÃO ENTRA NO RASTREIO DE TDAH'), findsOneWidget);
-    expect(find.text('Delta'), findsOneWidget);
-    expect(find.text('Alfa'), findsOneWidget);
     expect(
-      find.textContaining('nota do velocímetro é da coleta'),
+      find.text(
+          'Indicador visual de contato e continuidade do sinal recebido.'),
       findsOneWidget,
     );
+    expect(find.text('Exportar resultado da coleta'), findsOneWidget);
+    expect(find.text('Responder 6 perguntas'), findsOneWidget);
+    expect(
+      find.textContaining('Para completar a demonstração'),
+      findsOneWidget,
+    );
+    expect(find.text('Ondas observadas nesta coleta'), findsOneWidget);
+    expect(find.text('NÃO ENTRA NO RASTREIO DE TDAH'), findsNothing);
+    expect(
+      find.text('PADRÃO HISTÓRICO PESQUISADO NO TDAH'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('THETA MAIOR QUE BETA NAS DUAS ETAPAS'),
+      findsOneWidget,
+    );
+    expect(find.text('Delta'), findsOneWidget);
+    expect(find.text('Alfa'), findsOneWidget);
   });
 
-  testWidgets('mantém o ASRS separado do velocímetro e calcula 0 a 24',
+  testWidgets('registra ASRS com EEG sem misturar os cálculos e calcula 0 a 24',
       (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
@@ -117,7 +131,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Seis perguntas para adultos'), findsOneWidget);
-    expect(find.textContaining('não é combinada com o EEG'), findsOneWidget);
+    expect(
+      find.textContaining(
+          'respostas e o resumo do EEG ficam registrados juntos'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('pontuação ASRS usa somente as respostas'),
+      findsOneWidget,
+    );
     expect(find.text(AsrsScreener6.questions.first), findsOneWidget);
 
     for (var index = 0; index < AsrsScreener6.itemCount; index++) {
@@ -151,10 +173,16 @@ void main() {
       find.text('POSSIBILIDADE DE TDAH · RASTREIO ASRS V1.1'),
       findsOneWidget,
     );
-    expect(find.text('NÃO É DIAGNÓSTICO'), findsOneWidget);
+    expect(find.text('NÃO É DIAGNÓSTICO'), findsWidgets);
     expect(
         find.textContaining('possibilidade aumentada de TDAH'), findsOneWidget);
     expect(find.textContaining('não é diagnóstico'), findsWidgets);
+    expect(find.text('RESUMO PARA LEVAR AO MÉDICO'), findsOneWidget);
+    expect(find.text('18/24 · corte 14 atingido'), findsOneWidget);
+    expect(
+      find.textContaining('rastreio justifica procurar um médico'),
+      findsOneWidget,
+    );
     expect(find.text('Exportar os dois resultados'), findsOneWidget);
   });
 
@@ -201,7 +229,8 @@ void main() {
 
     expect(find.text('Ponto de corte não atingido'), findsOneWidget);
     expect(find.textContaining('Isso não exclui TDAH'), findsOneWidget);
-    expect(find.text('NÃO É DIAGNÓSTICO'), findsOneWidget);
+    expect(find.text('NÃO É DIAGNÓSTICO'), findsWidgets);
+    expect(find.text('0/24 · corte 14 não atingido'), findsOneWidget);
     expect(
         find.textContaining('possibilidade aumentada de TDAH'), findsNothing);
   });
@@ -266,6 +295,10 @@ void main() {
     expect(find.text('Bandas não exibidas'), findsNothing);
     expect(find.textContaining('trechos foram aproveitados'), findsOneWidget);
     expect(find.textContaining('alfa aumentou'), findsOneWidget);
+    expect(
+      find.textContaining('Para completar o resultado do BrainLink'),
+      findsOneWidget,
+    );
   });
 }
 

@@ -13,10 +13,11 @@ ordem de dificuldade.
 ## Estado do produto de demonstração em 17/08/2026
 
 O recorte de interface foi simplificado para uma coleta guiada em uma tela:
-conexão, instruções, duas fases, velocímetro de qualidade e exportação. Diário,
+conexão, instruções, duas fases, indicador de qualidade e exportação. Diário,
 histórico e persistência não fazem parte do produto atual. O ASRS v1.1 6Q para
-adultos foi incluído depois do velocímetro, com pontuação e exportação separadas
-do EEG. O `CODE_RAW` é transportado em lotes, desenhado ao vivo e processado por
+adultos foi incluído depois do indicador, com pontuação calculada separadamente
+do EEG. Respostas e resumo das ondas são registrados juntos na exportação. O
+`CODE_RAW` é transportado em lotes, desenhado ao vivo e processado por
 FFT em bandas relativas depois de rejeição básica de artefatos; o filtro de 60
 Hz está configurado. Essas bandas são apenas descritivas e nunca entram no
 rastreio. As lacunas abaixo continuam como roteiro de pesquisa, não como
@@ -99,7 +100,7 @@ Não como intenção nem como comentário:
 
 1. **Teste de linguagem — implementado.** Varre as strings da interface contra
    os termos proibidos de [[linguagem-permitida]] e falha o build. Também exige
-   os avisos de não diagnóstico e separação entre ASRS e EEG.
+   os avisos de não diagnóstico e separação dos cálculos de ASRS e EEG.
 2. **Teste do efeito Berger no hardware — pendente.** Alfa de olhos fechados maior que de olhos
    abertos, em gravação real. Se falhar, o pipeline está errado e nada depois
    dele vale.

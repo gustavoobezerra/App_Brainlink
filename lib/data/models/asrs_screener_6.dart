@@ -19,7 +19,8 @@ enum AsrsScoreBand {
   highPositive,
 }
 
-/// Resultado do ASRS separado de qualquer dado recebido do BrainLink.
+/// Resultado calculado somente pelas respostas, ainda que seja registrado no
+/// mesmo relatório que o resumo do BrainLink.
 class AsrsScreenerResult {
   const AsrsScreenerResult({required this.total, required this.band});
 

@@ -78,6 +78,10 @@ class EegSpectrumAnalysis {
   });
 
   static const String pipelineVersion = 'spectrum-v1.0.0';
+  static const String historicalAdhdContext =
+      'Alguns estudos relatam mais theta e menos beta em pacientes com TDAH, '
+      'mas isso não é diagnóstico. Responda ao questionário e procure um '
+      'especialista.';
 
   final EegPhaseSpectrum eyesOpen;
   final EegPhaseSpectrum eyesClosed;
@@ -117,6 +121,16 @@ class EegSpectrumAnalysis {
     return (eyesClosed.absoluteBands.alpha - eyesOpen.absoluteBands.alpha) /
         eyesOpen.absoluteBands.alpha *
         100;
+  }
+
+  /// Observa somente a relação descritiva theta > beta nas duas fases.
+  ///
+  /// Não existe corte individual validado que transforme esta observação em
+  /// probabilidade ou possibilidade de TDAH.
+  bool? get thetaAboveBetaInBothPhases {
+    if (!isUsable) return null;
+    return eyesOpen.bands.theta > eyesOpen.bands.beta &&
+        eyesClosed.bands.theta > eyesClosed.bands.beta;
   }
 }
 

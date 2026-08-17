@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:brainlink_app/data/models/asrs_screener_6.dart';
 import 'package:brainlink_app/services/eeg_spectrum_analyzer.dart';
 import 'package:brainlink_app/services/guided_collection_report_exporter.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -94,23 +95,40 @@ void main() {
       asrsBandLabel: 'Faixa superior de rastreio',
       asrsGuidance:
           'As respostas atingiram o ponto de corte e apontam possibilidade aumentada de TDAH neste rastreio. Este resultado não é diagnóstico.',
+      asrsAnswers: [
+        for (final question in AsrsScreener6.questions)
+          GuidedAsrsAnswer(
+            question: question,
+            response: 'Freqüentemente',
+            points: 3,
+          ),
+      ],
     );
 
     final html = exporter.buildHtml(complete);
     final text = exporter.buildText(complete);
 
     expect(html, contains('18 de 24'));
-    expect(html, contains('separado dos dados do BrainLink'));
+    expect(html, contains('registrados no mesmo relatório'));
     expect(html, contains('Possibilidade aumentada no ASRS'));
     expect(html, contains('NÃO É DIAGNÓSTICO'));
     expect(html, contains('Ondas observadas nesta coleta'));
     expect(html, contains('Olhos fechados'));
     expect(html, contains('58.0%'));
+    expect(html, contains('Respostas registradas junto com o EEG'));
+    expect(html, contains(AsrsScreener6.questions.first));
+    expect(html, contains(AsrsScreener6.questions.last));
+    expect(RegExp('<li>').allMatches(html), hasLength(6));
+    expect(html, contains('Freqüentemente — 3 pontos'));
+    expect(html, contains('Resumo para levar ao médico'));
     expect(text, contains('Pontuação: 18/24'));
     expect(text, contains('possibilidade aumentada de TDAH'));
     expect(text, contains('não é diagnóstico'));
-    expect(text, contains('NÃO ENTRA NO RASTREIO DE TDAH'));
+    expect(text, isNot(contains('NÃO ENTRA NO RASTREIO DE TDAH')));
     expect(text, contains('Pipeline: spectrum-v1.0.0'));
+    expect(text, contains('RESPOSTAS REGISTRADAS JUNTO COM O EEG'));
+    expect(text, contains('corte 14 atingido'));
+    expect(text, contains('rastreio justifica procurar um médico'));
     expect(text, contains('ASRS_v1.1_screener%286Q%29_scoring_update.pdf'));
   });
 

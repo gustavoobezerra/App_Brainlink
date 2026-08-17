@@ -2,6 +2,18 @@ import 'dart:io';
 
 import 'eeg_spectrum_analyzer.dart';
 
+class GuidedAsrsAnswer {
+  const GuidedAsrsAnswer({
+    required this.question,
+    required this.response,
+    required this.points,
+  });
+
+  final String question;
+  final String response;
+  final int points;
+}
+
 /// Resultado simples de uma coleta guiada do BrainLink.
 class GuidedCollectionReportData {
   const GuidedCollectionReportData({
@@ -18,6 +30,7 @@ class GuidedCollectionReportData {
     this.asrsLabel,
     this.asrsBandLabel,
     this.asrsGuidance,
+    this.asrsAnswers = const [],
   });
 
   final DateTime startedAt;
@@ -33,6 +46,7 @@ class GuidedCollectionReportData {
   final String? asrsLabel;
   final String? asrsBandLabel;
   final String? asrsGuidance;
+  final List<GuidedAsrsAnswer> asrsAnswers;
 }
 
 /// Exporta a tela final em formatos autocontidos e fáceis de compartilhar.
@@ -61,7 +75,7 @@ class GuidedCollectionReportExporter {
     .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.item{padding:16px;border:1px solid #dbe3ec;border-radius:12px}
     .item span{display:block;color:#627086;font-size:13px}.notice{margin-top:26px;padding:15px;border-left:4px solid #315f8c;background:#f0f5fa}
     .asrs{margin-top:26px;padding:22px;border:1px solid #dbe3ec;border-radius:16px}.asrs h2{margin:0 0 6px}.asrs-score{font-size:38px;font-weight:800;color:#315f8c}
-    .eeg{margin-top:26px;padding:22px;border:1px solid #dbe3ec;border-radius:16px}.bands{width:100%;border-collapse:collapse;margin-top:12px}.bands th,.bands td{padding:8px;border-bottom:1px solid #e1e7ee;text-align:left}.badge{display:inline-block;padding:5px 9px;border-radius:12px;background:#e8edf3;font-size:12px;font-weight:800}
+    .eeg{margin-top:26px;padding:22px;border:1px solid #dbe3ec;border-radius:16px}.bands{width:100%;border-collapse:collapse;margin-top:12px}.bands th,.bands td{padding:8px;border-bottom:1px solid #e1e7ee;text-align:left}.badge{display:inline-block;padding:5px 9px;border-radius:12px;background:#e8edf3;font-size:12px;font-weight:800}.research{margin:14px 0;padding:14px;border-left:4px solid #b27608;background:#fff8e8}.answers li{margin:0 0 12px}
     @media(max-width:560px){main{padding:24px}.grid{grid-template-columns:1fr}}
   </style>
 </head><body><main>
@@ -131,11 +145,13 @@ ${_asrsText(data)}
   <section class="asrs">
     <h2>Possibilidade de TDAH no rastreio ASRS v1.1</h2>
     <div class="badge">NÃO É DIAGNÓSTICO</div>
-    <div class="muted">Resultado das respostas, separado dos dados do BrainLink</div>
+    <div class="muted">Respostas e resumo do BrainLink registrados no mesmo relatório; cálculos separados</div>
     <div class="asrs-score">$score de 24</div>
     <strong>${_escape(label)}</strong>
     <div class="muted">${_escape(bandLabel)}</div>
     <p>${_escape(guidance)}</p>
+    ${_asrsAnswersHtml(data.asrsAnswers)}
+    ${_combinedGuidanceHtml(data)}
     <p class="muted">ASRS v1.1 6-Question Screener © New York University and Ronald C. Kessler, PhD. All rights reserved. Derived from the WHO CIDI.</p>
     <p class="muted">Pontuação 0–24: <a href="https://www.hcp.med.harvard.edu/ncs/ftpdir/adhd/ASRS_v1.1_screener%286Q%29_scoring_update.pdf">fonte oficial</a>.</p>
   </section>''';
@@ -156,10 +172,12 @@ ${_asrsText(data)}
 
 POSSIBILIDADE DE TDAH NO RASTREIO ASRS V1.1 — ADULTOS (18+)
 NÃO É DIAGNÓSTICO
-Resultado das respostas, separado dos dados do BrainLink.
+Respostas e resumo do BrainLink registrados no mesmo relatório; cálculos separados.
 Pontuação: $score/24 — $label
 Faixa: $bandLabel
 $guidance
+${_asrsAnswersText(data.asrsAnswers)}
+${_combinedGuidanceText(data)}
 
 ASRS v1.1 6-Question Screener © New York University and Ronald C. Kessler, PhD. All rights reserved. Derived from the WHO CIDI.
 Pontuação oficial: https://www.hcp.med.harvard.edu/ncs/ftpdir/adhd/ASRS_v1.1_screener%286Q%29_scoring_update.pdf
@@ -173,7 +191,7 @@ Pontuação oficial: https://www.hcp.med.harvard.edu/ncs/ftpdir/adhd/ASRS_v1.1_s
       return '''
   <section class="eeg">
     <h2>Ondas observadas nesta coleta</h2>
-    <div class="badge">NÃO ENTRA NO RASTREIO DE TDAH</div>
+    ${_historicalPatternHtml(spectrum)}
     <p><strong>Bandas não exibidas.</strong> ${_escape(spectrum.qualityExplanation)}</p>
     <p class="muted">Pipeline ${EegSpectrumAnalysis.pipelineVersion}.</p>
   </section>''';
@@ -182,7 +200,7 @@ Pontuação oficial: https://www.hcp.med.harvard.edu/ncs/ftpdir/adhd/ASRS_v1.1_s
     return '''
   <section class="eeg">
     <h2>Ondas observadas nesta coleta</h2>
-    <div class="badge">NÃO ENTRA NO RASTREIO DE TDAH</div>
+    ${_historicalPatternHtml(spectrum)}
     <table class="bands"><thead><tr><th>Banda</th><th>Olhos abertos</th><th>Olhos fechados</th></tr></thead><tbody>
       ${_bandRow(EegBand.delta, spectrum)}
       ${_bandRow(EegBand.theta, spectrum)}
@@ -201,7 +219,7 @@ Pontuação oficial: https://www.hcp.med.harvard.edu/ncs/ftpdir/adhd/ASRS_v1.1_s
       return '''
 
 ONDAS OBSERVADAS NESTA COLETA
-NÃO ENTRA NO RASTREIO DE TDAH
+${_historicalPatternText(spectrum)}
 Bandas não exibidas: ${spectrum.qualityExplanation}
 Pipeline: ${EegSpectrumAnalysis.pipelineVersion}
 ''';
@@ -211,7 +229,7 @@ Pipeline: ${EegSpectrumAnalysis.pipelineVersion}
     return '''
 
 ONDAS OBSERVADAS NESTA COLETA
-NÃO ENTRA NO RASTREIO DE TDAH
+${_historicalPatternText(spectrum)}
 ${line(EegBand.delta)}
 ${line(EegBand.theta)}
 ${line(EegBand.alpha)}
@@ -225,6 +243,95 @@ As bandas descrevem a coleta e não indicam TDAH.
 
   static String _bandRow(EegBand band, EegSpectrumAnalysis spectrum) =>
       '<tr><td>${_escape(band.label)}</td><td>${spectrum.eyesOpen.bands.valueFor(band).toStringAsFixed(1)}%</td><td>${spectrum.eyesClosed.bands.valueFor(band).toStringAsFixed(1)}%</td></tr>';
+
+  static String _historicalPatternHtml(EegSpectrumAnalysis spectrum) => '''
+    <div class="research"><strong>${_escape(_historicalPatternStatus(spectrum))}</strong><br>${_escape(EegSpectrumAnalysis.historicalAdhdContext)}</div>''';
+
+  static String _historicalPatternText(EegSpectrumAnalysis spectrum) =>
+      '${_historicalPatternStatus(spectrum)}\n${EegSpectrumAnalysis.historicalAdhdContext}';
+
+  static String _historicalPatternStatus(EegSpectrumAnalysis spectrum) =>
+      switch (spectrum.thetaAboveBetaInBothPhases) {
+        true => 'Combinação theta maior que beta observada nas duas etapas.',
+        false =>
+          'Combinação theta maior que beta não observada nas duas etapas.',
+        null => 'Comparação theta/beta indisponível nesta coleta.',
+      };
+
+  static String _asrsAnswersHtml(List<GuidedAsrsAnswer> answers) {
+    if (answers.isEmpty) return '';
+    final items = answers
+        .map(
+          (answer) => '<li><strong>${_escape(answer.question)}</strong><br>'
+              '${_escape(answer.response)} — ${answer.points} '
+              '${answer.points == 1 ? 'ponto' : 'pontos'}</li>',
+        )
+        .join();
+    return '<h3>Respostas registradas junto com o EEG</h3>'
+        '<ol class="answers">$items</ol>';
+  }
+
+  static String _asrsAnswersText(List<GuidedAsrsAnswer> answers) {
+    if (answers.isEmpty) return '';
+    final lines = answers.indexed.map((entry) {
+      final (index, answer) = entry;
+      final points = answer.points == 1 ? 'ponto' : 'pontos';
+      return '${index + 1}. ${answer.question}\n'
+          'Resposta: ${answer.response} — ${answer.points} $points';
+    }).join('\n');
+    return '\nRESPOSTAS REGISTRADAS JUNTO COM O EEG\n$lines\n';
+  }
+
+  static String _combinedGuidanceHtml(GuidedCollectionReportData data) {
+    final score = data.asrsScore;
+    if (score == null) return '';
+    final reached = score >= 14;
+    final pattern = data.spectrum?.thetaAboveBetaInBothPhases;
+    return '''
+    <div class="notice"><strong>Resumo para levar ao médico — NÃO É DIAGNÓSTICO</strong><br>
+    Questionário ASRS: $score/24 · corte 14 ${reached ? 'atingido' : 'não atingido'}<br>
+    Ondas desta coleta: ${_escape(_patternLabel(pattern))}
+    <p>${_escape(_combinedGuidance(reached, pattern))}</p></div>''';
+  }
+
+  static String _combinedGuidanceText(GuidedCollectionReportData data) {
+    final score = data.asrsScore;
+    if (score == null) return '';
+    final reached = score >= 14;
+    final pattern = data.spectrum?.thetaAboveBetaInBothPhases;
+    return '''
+RESUMO PARA LEVAR AO MÉDICO — NÃO É DIAGNÓSTICO
+Questionário ASRS: $score/24 · corte 14 ${reached ? 'atingido' : 'não atingido'}
+Ondas desta coleta: ${_patternLabel(pattern)}
+${_combinedGuidance(reached, pattern)}
+''';
+  }
+
+  static String _patternLabel(bool? pattern) => switch (pattern) {
+        true => 'theta maior que beta nas duas etapas',
+        false => 'theta maior que beta não apareceu nas duas etapas',
+        null => 'comparação theta/beta indisponível',
+      };
+
+  static String _combinedGuidance(bool reached, bool? pattern) =>
+      switch ((reached, pattern)) {
+        (true, true) =>
+          'O ponto de corte do ASRS foi atingido e a combinação theta maior '
+              'que beta apareceu nas duas etapas. As ondas não confirmam TDAH, '
+              'mas o rastreio justifica procurar um médico para uma avaliação '
+              'clínica completa.',
+        (true, _) => 'O ponto de corte do ASRS foi atingido. A ausência ou '
+            'indisponibilidade do padrão histórico nas ondas não exclui '
+            'TDAH. Procure um médico para uma avaliação clínica completa.',
+        (false, true) =>
+          'O ponto de corte do ASRS não foi atingido. A combinação theta '
+              'maior que beta também ocorre em pessoas sem TDAH e não altera '
+              'esse resultado. Se houver dificuldade no dia a dia, procure um '
+              'médico.',
+        (false, _) =>
+          'O ponto de corte do ASRS não foi atingido, o que não exclui TDAH. '
+              'Se houver dificuldade no dia a dia, procure um médico.',
+      };
 
   static String _alphaDescription(double? change) {
     if (change == null) return 'A variação de alfa não pôde ser calculada.';

@@ -18,7 +18,7 @@ O aplicativo possui **um único fluxo visual**, sem abas, diário ou histórico:
 2. instruções de posicionamento e imobilidade;
 3. coleta guiada com olhos abertos e fechados;
 4. traçado ao vivo e bandas descritivas quando a qualidade permite;
-5. velocímetro de qualidade da coleta e dados proprietários;
+5. indicador visual de qualidade da coleta e dados proprietários;
 6. ASRS v1.1 de seis perguntas para adultos, em resultado separado;
 7. exportação ou repetição.
 
@@ -29,14 +29,14 @@ oito segundos para ser apresentável sem headset.
 
 | Camada | Estado |
 | --- | --- |
-| Interface | fluxo único responsivo, instruções, traçado, velocímetro, bandas e ASRS |
+| Interface | fluxo único responsivo, instruções, traçado, indicador, bandas e ASRS |
 | Hardware | descoberta Bluetooth Clássico, conexão e erros expostos ao Flutter |
 | EEG consolidado | snapshot somente após `EEGPOWER` válido; ausência preservada |
 | EEG bruto | `EventChannel` em lotes de 128 amostras com sequência, contato e perdas |
 | Espectro | FFT de épocas de 1 s, Hann, 50% de sobreposição e rejeição de artefatos |
-| Resultado EEG | qualidade e bandas relativas desta coleta; nunca classifica a pessoa |
-| Resultado ASRS | 0–24; corte 14 comunica possibilidade aumentada, sem percentual e sem EEG |
-| Exportação | HTML e TXT com seções separadas, somente sob ação da pessoa |
+| Resultado EEG | qualidade, bandas e estado theta > beta; nunca classifica a pessoa |
+| Resultado ASRS | 0–24; corte 14 comunica possibilidade, calculada sem EEG |
+| Exportação | HTML/TXT reúne EEG e as seis respostas, mantendo cálculos separados |
 | Qualidade | testes de modelo, interface, exportação e linguagem; CI no GitHub |
 
 ## Correções consolidadas
@@ -60,7 +60,7 @@ oito segundos para ser apresentável sem headset.
 ## Limites abertos
 
 - a conexão deve ser exercitada no conjunto real BrainLink Lite + Android;
-- a nota do velocímetro avalia qualidade da coleta, não qualidade da pessoa;
+- a nota do indicador avalia qualidade da coleta, não qualidade da pessoa;
 - eSense continua sendo algoritmo proprietário sem interpretação clínica;
 - as bandas calculadas não possuem norma para este hardware e não indicam
   TDAH; IAF e ajuste aperiódico permanecem fora do produto;

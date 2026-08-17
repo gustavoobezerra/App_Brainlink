@@ -33,11 +33,21 @@ void main() {
 
   test('possibilidade fica qualificada como rastreio e não diagnóstico', () {
     final source = File('lib/ui/screens/home_screen.dart').readAsStringSync();
+    final spectrumSource =
+        File('lib/services/eeg_spectrum_analyzer.dart').readAsStringSync();
 
     expect(source, contains('POSSIBILIDADE DE TDAH · RASTREIO ASRS V1.1'));
     expect(source, contains('NÃO É DIAGNÓSTICO'));
-    expect(source, contains('NÃO ENTRA NO RASTREIO DE TDAH'));
-    expect(source, contains('não usa dados do BrainLink'));
+    expect(source, isNot(contains('NÃO ENTRA NO RASTREIO DE TDAH')));
+    expect(source, contains('pontuação ASRS usa somente as respostas'));
+    expect(source, contains('PADRÃO HISTÓRICO PESQUISADO NO TDAH'));
+    expect(
+      spectrumSource,
+      contains('mas isso não é diagnóstico'),
+    );
+    expect(spectrumSource, contains('Responda ao questionário'));
+    expect(source.toLowerCase(), isNot(contains('velocímetro')));
+    expect(source, isNot(contains('Ela não avalia saúde, TDAH')));
   });
 }
 
