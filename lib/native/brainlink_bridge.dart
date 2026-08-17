@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 
 import '../core/logger.dart';
+import '../data/models/bluetooth_device_info.dart';
 import '../data/models/eeg_data.dart';
+import '../data/models/raw_batch.dart';
 
 /// Interface entre a camada Flutter e o SDK Android do BrainLink.
 ///
@@ -18,6 +20,7 @@ class BrainLinkBridge {
 
   static final BrainLinkBridge _instance = BrainLinkBridge._internal();
   static const MethodChannel _channel = MethodChannel('com.brainlink.app/sdk');
+  static const EventChannel _rawChannel = EventChannel('com.brainlink.app/raw');
 
   final Logger _logger = const Logger('BrainLinkBridge');
   final StreamController<EEGData> _eegDataController =
@@ -28,6 +31,10 @@ class BrainLinkBridge {
       StreamController<String>.broadcast();
   final StreamController<String> _errorController =
       StreamController<String>.broadcast();
+  final StreamController<BluetoothDeviceInfo> _deviceController =
+      StreamController<BluetoothDeviceInfo>.broadcast();
+  final StreamController<bool> _scanStateController =
+      StreamController<bool>.broadcast();
 
   bool _isConnected = false;
 
@@ -39,6 +46,15 @@ class BrainLinkBridge {
       _connectionStatusController.stream;
 
   Stream<String> get errorStream => _errorController.stream;
+
+  Stream<BluetoothDeviceInfo> get deviceStream => _deviceController.stream;
+
+  Stream<bool> get scanStateStream => _scanStateController.stream;
+
+  /// EEG bruto a 128 Hz, agrupado em lotes de um segundo pela camada Android.
+  Stream<RawBatch> get rawDataStream => _rawChannel
+      .receiveBroadcastStream()
+      .map((event) => RawBatch.fromMap(event as Map<Object?, Object?>));
 
   bool get isConnected => _isConnected;
 
@@ -57,6 +73,11 @@ class BrainLinkBridge {
           final message = call.arguments as String;
           _logger.error('Erro informado pelo SDK nativo: $message');
           _errorController.add(message);
+        case 'onDeviceFound':
+          final map = call.arguments as Map<Object?, Object?>;
+          _deviceController.add(BluetoothDeviceInfo.fromMap(map));
+        case 'onScanStateChanged':
+          _scanStateController.add(call.arguments as bool);
         default:
           _logger.warning('Callback nativo desconhecido: ${call.method}');
       }
@@ -95,17 +116,6 @@ class BrainLinkBridge {
     }
   }
 
-  /// Encaminha bytes recebidos externamente para a camada nativa.
-  Future<void> parseRawData(List<int> rawData) async {
-    try {
-      await _channel.invokeMethod<void>('parseData', {'rawData': rawData});
-    } on PlatformException catch (error, stackTrace) {
-      final message = 'Não foi possível processar os dados: ${error.message}';
-      _logger.error(message, error, stackTrace);
-      _errorController.add(message);
-    }
-  }
-
   /// Solicita o início da descoberta de dispositivos.
   Future<bool> startScan() async {
     try {
@@ -120,13 +130,47 @@ class BrainLinkBridge {
   }
 
   /// Solicita a interrupção da descoberta de dispositivos.
-  Future<void> stopScan() async {
+  Future<bool> stopScan() async {
     try {
-      await _channel.invokeMethod<void>('stopScan');
+      return await _channel.invokeMethod<bool>('stopScan') ?? false;
     } on PlatformException catch (error, stackTrace) {
       final message = 'Não foi possível interromper a busca: ${error.message}';
       _logger.error(message, error, stackTrace);
       _errorController.add(message);
+      return false;
+    }
+  }
+
+  /// Diretório privado do aplicativo, usado pela persistência local.
+  Future<String?> getStorageRoot() async {
+    try {
+      return await _channel.invokeMethod<String>('getStorageRoot');
+    } on PlatformException catch (error, stackTrace) {
+      final message =
+          'Não foi possível acessar o armazenamento: ${error.message}';
+      _logger.error(message, error, stackTrace);
+      _errorController.add(message);
+      return null;
+    }
+  }
+
+  /// Abre o compartilhamento do Android para um arquivo privado do app.
+  Future<bool> shareFile(
+    String path, {
+    String mimeType = 'text/html',
+  }) async {
+    try {
+      return await _channel.invokeMethod<bool>('shareFile', {
+            'path': path,
+            'mimeType': mimeType,
+          }) ??
+          false;
+    } on PlatformException catch (error, stackTrace) {
+      final message =
+          'Não foi possível compartilhar o relatório: ${error.message}';
+      _logger.error(message, error, stackTrace);
+      _errorController.add(message);
+      return false;
     }
   }
 
@@ -137,6 +181,8 @@ class BrainLinkBridge {
       _connectionStateController.close(),
       _connectionStatusController.close(),
       _errorController.close(),
+      _deviceController.close(),
+      _scanStateController.close(),
     ]);
   }
 }
