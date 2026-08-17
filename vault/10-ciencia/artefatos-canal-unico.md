@@ -85,12 +85,9 @@ número derivado nenhum** — exibe o motivo. Ver [[ADR-004-linguagem-nao-diagno
 
 ## A rede elétrica de 60 Hz
 
-Ver [[sdk-libstreamsdk]]: o SDK expõe `MWM15_setFilterType(FILTER_60HZ)` e o
-código atual **não chama esse método**. O Brasil opera em 60 Hz. Sem o filtro,
-a rede contamina gama e distorce o ajuste aperiódico na borda superior do
-espectro.
-
-É uma linha de código com impacto científico direto.
+Ver [[sdk-libstreamsdk]]: o SDK expõe `MWM15_setFilterType(FILTER_60HZ)`. O
+código Android passou a configurar esse filtro antes da coleta, adequado à rede
+brasileira. Isso reduz contaminação de gama e do limite superior do espectro.
 
 ## Relacionadas
 

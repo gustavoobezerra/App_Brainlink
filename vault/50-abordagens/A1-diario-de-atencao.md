@@ -10,6 +10,11 @@ atualizado: 2026-08-17
 > [!warning] Não é diagnóstico
 > Ver [[linguagem-permitida]].
 
+> [!note] Estado do produto em 17/08/2026
+> Esta abordagem permanece documentada como alternativa de pesquisa, mas o
+> diário, o histórico e o ASRS foram retirados da interface atual. O aplicativo
+> de apresentação executa apenas coleta guiada e avalia qualidade do sinal.
+
 ## O que é
 
 Sessões curtas e repetidas — da ordem de cinco minutos por dia — registrando as

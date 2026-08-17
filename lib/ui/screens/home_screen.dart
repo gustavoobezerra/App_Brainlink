@@ -3,16 +3,17 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-import '../../data/models/asrs_screener_6.dart';
-import '../../data/models/context_journal_entry.dart';
 import '../../data/models/eeg_data.dart';
-import '../../data/models/session_record.dart';
 import '../../native/brainlink_bridge.dart';
-import '../../services/local_session_store.dart';
-import '../../services/session_report_exporter.dart';
+import '../../services/guided_collection_report_exporter.dart';
 
 enum AcquisitionMode { demonstration, hardware }
+
+enum CollectionStep { choice, instructions, running, result }
+
+enum CollectionPhase { eyesOpen, eyesClosed }
 
 class ConnectableDevice {
   const ConnectableDevice(this.id, this.name, {required this.isPaired});
@@ -22,13 +23,12 @@ class ConnectableDevice {
   final bool isPaired;
 }
 
-/// Contrato que a descoberta Bluetooth nativa pode implementar sem alterar a UI.
 abstract interface class DeviceDiscoveryGateway {
   Future<List<ConnectableDevice>> listDevices();
+
   Future<void> connect(ConnectableDevice device);
 }
 
-/// Adaptador da interface para a descoberta Bluetooth Clássico nativa.
 class NativeBrainLinkGateway implements DeviceDiscoveryGateway {
   NativeBrainLinkGateway(this.bridge);
 
@@ -98,133 +98,157 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
     this.deviceGateway,
+    this.demonstrationPhaseDuration = const Duration(seconds: 8),
+    this.hardwarePhaseDuration = const Duration(minutes: 1),
+    this.tickInterval = const Duration(seconds: 1),
   });
 
   final DeviceDiscoveryGateway? deviceGateway;
+  final Duration demonstrationPhaseDuration;
+  final Duration hardwarePhaseDuration;
+  final Duration tickInterval;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  static const _pipelineVersion = 'a1-1.0.0';
-
   final BrainLinkBridge _bridge = BrainLinkBridge();
-  final SessionReportExporter _reportExporter = const SessionReportExporter();
+  final GuidedCollectionReportExporter _exporter =
+      const GuidedCollectionReportExporter();
+
   late final DeviceDiscoveryGateway _deviceGateway;
-  StreamSubscription<EEGData>? _hardwareDataSubscription;
+  StreamSubscription<EEGData>? _dataSubscription;
   StreamSubscription<bool>? _connectionSubscription;
   StreamSubscription<String>? _errorSubscription;
-  LocalSessionStore? _store;
-  Directory? _storageRoot;
+  Timer? _timer;
 
-  int _page = 0;
-  AcquisitionMode _mode = AcquisitionMode.demonstration;
+  CollectionStep _step = CollectionStep.choice;
+  AcquisitionMode? _mode;
+  CollectionPhase _phase = CollectionPhase.eyesOpen;
+  Duration _phaseElapsed = Duration.zero;
+  DateTime? _startedAt;
+  DateTime? _endedAt;
+  final List<_Reading> _readings = [];
+
+  bool _showHardware = false;
   bool _scanning = false;
   bool _connecting = false;
   bool _connected = false;
-  String? _connectionMessage;
   List<ConnectableDevice> _devices = const [];
-
-  Timer? _timer;
-  bool _sessionActive = false;
-  DateTime? _sessionStartedAt;
-  int _tick = 0;
-  final List<double> _attention = [];
-  final List<double> _meditation = [];
-  final List<_SessionEntry> _history = [];
-  final List<SessionEpochRecord> _currentEpochs = [];
-  List<SessionEpochRecord> _lastEpochs = const [];
-  SessionMetadata? _lastMetadata;
-  ContextJournalEntry? _lastJournal;
-  String? _lastExportPath;
-  double _sleepHours = 7;
-  String _mood = 'Neutro';
-  String _medication = 'Não informado';
-  String _task = 'Rotina';
-
-  final List<AsrsResponse?> _answers =
-      List<AsrsResponse?>.filled(AsrsScreener6.items.length, null);
+  String? _connectionMessage;
+  String? _exportMessage;
 
   @override
   void initState() {
     super.initState();
     _deviceGateway = widget.deviceGateway ?? NativeBrainLinkGateway(_bridge);
-    _hardwareDataSubscription = _bridge.eegDataStream.listen(_onHardwareData);
+    _dataSubscription = _bridge.eegDataStream.listen(_onHardwareData);
     _connectionSubscription = _bridge.connectionStateStream.listen((connected) {
-      if (mounted) setState(() => _connected = connected);
+      if (!mounted) return;
+      setState(() => _connected = connected);
     });
     _errorSubscription = _bridge.errorStream.listen((message) {
-      if (mounted) setState(() => _connectionMessage = message);
+      if (!mounted) return;
+      setState(() => _connectionMessage = message);
     });
-    unawaited(_initializeStore());
   }
 
   @override
   void dispose() {
     _timer?.cancel();
-    unawaited(_hardwareDataSubscription?.cancel());
+    unawaited(_dataSubscription?.cancel());
     unawaited(_connectionSubscription?.cancel());
     unawaited(_errorSubscription?.cancel());
     super.dispose();
   }
 
-  Future<void> _initializeStore() async {
-    try {
-      final path = await _bridge.getStorageRoot();
-      if (path == null || path.isEmpty) return;
-      _storageRoot = Directory(path);
-      _store = LocalSessionStore(_storageRoot!);
-      final metadata = await _store!.listSessions();
-      final restored = <_SessionEntry>[];
-      StoredSession? latest;
-      ContextJournalEntry? latestJournal;
-      for (final item in metadata.take(20)) {
-        final stored = await _store!.readSession(item.sessionId);
-        latest ??= stored;
-        final journals = stored.events
-            .where((event) => event.type == SessionEventType.journal)
-            .map((event) => ContextJournalEntry.fromJson(event.payload))
-            .toList();
-        if (latestJournal == null && journals.isNotEmpty) {
-          latestJournal = journals.last;
-        }
-        final acceptedAttention = stored.epochs
-            .where((epoch) =>
-                epoch.accepted && epoch.manufacturerAttention != null)
-            .map((epoch) => epoch.manufacturerAttention!)
-            .toList();
-        final journal = journals.isEmpty ? null : journals.last;
-        restored.add(
-          _SessionEntry(
-            date: item.startedAt,
-            source: item.deviceLabel,
-            sleepHours: journal?.sleepHours ?? 0,
-            mood: journal?.moodLevel == null
-                ? 'Não informado'
-                : '${journal!.moodLevel}/5',
-            medication: journal?.medicationNote ?? 'Não informado',
-            task: journal?.task ?? 'Não informado',
-            manufacturerMean: acceptedAttention.isEmpty
-                ? null
-                : acceptedAttention.reduce((a, b) => a + b) /
-                    acceptedAttention.length,
-          ),
-        );
-      }
-      if (mounted && restored.isNotEmpty) {
-        setState(() {
-          _history
-            ..clear()
-            ..addAll(restored);
-          _lastMetadata = latest?.metadata;
-          _lastEpochs = latest?.epochs ?? const [];
-          _lastJournal = latestJournal;
-        });
-      }
-    } on Exception {
-      // Fora do Android, a demonstração continua funcional em memória.
+  Duration get _phaseDuration => _mode == AcquisitionMode.hardware
+      ? widget.hardwarePhaseDuration
+      : widget.demonstrationPhaseDuration;
+
+  int get _remainingSeconds => math.max(
+        0,
+        (_phaseDuration - _phaseElapsed).inMilliseconds ~/ 1000,
+      );
+
+  double get _totalProgress {
+    final duration = math.max(1, _phaseDuration.inMilliseconds);
+    final withinPhase = (_phaseElapsed.inMilliseconds / duration).clamp(0, 1);
+    return _phase == CollectionPhase.eyesOpen
+        ? withinPhase / 2
+        : 0.5 + withinPhase / 2;
+  }
+
+  int? get _qualityScore {
+    final qualities = _readings
+        .where((reading) => reading.signalQuality != null)
+        .map((reading) => reading.signalQuality!.clamp(0, 200))
+        .toList();
+    if (qualities.isEmpty) return null;
+    final contact =
+        qualities.map((quality) => 100 - quality / 2).reduce((a, b) => a + b) /
+            qualities.length;
+    final expected = math.max(
+      1,
+      (_phaseDuration.inMilliseconds * 2 / 1000).round(),
+    );
+    final coverage = math.min(1.0, _readings.length / expected) * 100;
+    return (contact * 0.8 + coverage * 0.2).round().clamp(0, 100);
+  }
+
+  String get _qualityLabel => switch (_qualityScore) {
+        null => 'Sem dados suficientes',
+        >= 80 => 'Coleta boa',
+        >= 60 => 'Coleta aceitável',
+        _ => 'Coleta ruim',
+      };
+
+  Color get _qualityColor => switch (_qualityScore) {
+        null => const Color(0xFF8493A6),
+        >= 80 => const Color(0xFF56D6B3),
+        >= 60 => const Color(0xFFFFC45C),
+        _ => const Color(0xFFFF6B78),
+      };
+
+  double? get _attentionMean => _mean(
+        _readings
+            .where((reading) => reading.attention != null)
+            .map((reading) => reading.attention!),
+      );
+
+  double? get _meditationMean => _mean(
+        _readings
+            .where((reading) => reading.meditation != null)
+            .map((reading) => reading.meditation!),
+      );
+
+  double? get _displayAttentionMean =>
+      (_qualityScore ?? 0) >= 60 ? _attentionMean : null;
+
+  double? get _displayMeditationMean =>
+      (_qualityScore ?? 0) >= 60 ? _meditationMean : null;
+
+  void _chooseDemonstration() {
+    setState(() {
+      _mode = AcquisitionMode.demonstration;
+      _step = CollectionStep.instructions;
+      _showHardware = false;
+      _connectionMessage = null;
+    });
+  }
+
+  Future<void> _openHardware() async {
+    setState(() {
+      _mode = AcquisitionMode.hardware;
+      _showHardware = true;
+      _connectionMessage = null;
+    });
+    if (_connected) {
+      setState(() => _step = CollectionStep.instructions);
+      return;
     }
+    await _scan();
   }
 
   Future<void> _scan() async {
@@ -235,19 +259,19 @@ class _HomeScreenState extends State<HomeScreen> {
       _connectionMessage = null;
     });
     try {
-      final result = await _deviceGateway.listDevices();
+      final devices = await _deviceGateway.listDevices();
       if (!mounted) return;
       setState(() {
-        _devices = result;
-        if (result.isEmpty) {
+        _devices = devices;
+        if (devices.isEmpty) {
           _connectionMessage =
-              'Nenhum dispositivo localizado. Confira o pareamento e tente novamente.';
+              'Nenhum BrainLink encontrado. Pareie-o nas configurações do Android e toque em Buscar novamente.';
         }
       });
-    } catch (_) {
+    } on Object {
       if (mounted) {
         setState(() => _connectionMessage =
-            'Não foi possível consultar os dispositivos agora. Tente novamente.');
+            'Não foi possível buscar agora. Confira Bluetooth e permissões.');
       }
     } finally {
       if (mounted) setState(() => _scanning = false);
@@ -258,525 +282,642 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_connecting) return;
     setState(() {
       _connecting = true;
-      _connectionMessage = null;
+      _connectionMessage = 'Conectando a ${device.name}…';
     });
     try {
       await _deviceGateway.connect(device);
       if (!mounted) return;
       setState(() {
         _connected = true;
-        _connectionMessage = 'BrainLink conectado e pronto para a sessão.';
+        _connectionMessage = 'BrainLink conectado.';
+        _step = CollectionStep.instructions;
       });
-    } catch (_) {
+    } on Object {
       if (mounted) {
         setState(() => _connectionMessage =
-            'A conexão não foi concluída. Aproxime o dispositivo e tente novamente.');
+            'A conexão não terminou. Desligue outros apps ligados ao BrainLink e tente novamente.');
       }
     } finally {
       if (mounted) setState(() => _connecting = false);
     }
   }
 
-  void _startSession() {
+  void _startCollection() {
     if (_mode == AcquisitionMode.hardware && !_connected) {
-      _message('Conecte um dispositivo antes de iniciar neste modo.');
-      setState(() => _page = 0);
+      _message('Conecte o BrainLink antes de iniciar.');
       return;
     }
     _timer?.cancel();
     setState(() {
-      _sessionActive = true;
-      _sessionStartedAt = DateTime.now();
-      _tick = 0;
-      _attention.clear();
-      _meditation.clear();
-      _currentEpochs.clear();
+      _step = CollectionStep.running;
+      _phase = CollectionPhase.eyesOpen;
+      _phaseElapsed = Duration.zero;
+      _startedAt = DateTime.now();
+      _endedAt = null;
+      _readings.clear();
+      _exportMessage = null;
+      if (_mode == AcquisitionMode.demonstration) {
+        _appendDemonstrationReading();
+      }
     });
-    if (_mode == AcquisitionMode.demonstration) {
-      _appendSample();
-      _timer = Timer.periodic(
-        const Duration(milliseconds: 800),
-        (_) => _appendSample(),
-      );
+    _timer = Timer.periodic(widget.tickInterval, (_) => _tickCollection());
+  }
+
+  void _tickCollection() {
+    if (!mounted || _step != CollectionStep.running) return;
+    var phaseChanged = false;
+    var finished = false;
+    setState(() {
+      if (_mode == AcquisitionMode.demonstration) {
+        _appendDemonstrationReading();
+      }
+      _phaseElapsed += widget.tickInterval;
+      if (_phaseElapsed >= _phaseDuration) {
+        if (_phase == CollectionPhase.eyesOpen) {
+          _phase = CollectionPhase.eyesClosed;
+          _phaseElapsed = Duration.zero;
+          phaseChanged = true;
+        } else {
+          finished = true;
+        }
+      }
+    });
+    if (phaseChanged) {
+      _signalUser();
+    } else if (finished) {
+      _finishCollection();
     }
   }
 
-  void _appendSample() {
-    if (!mounted) return;
-    final first = 49 + ((_tick * 7) % 25) - ((_tick % 4) * 3);
-    final second = 55 + ((_tick * 5) % 19) - ((_tick % 5) * 2);
-    final attention = first.clamp(0, 100).toInt();
-    final meditation = second.clamp(0, 100).toInt();
-    setState(() {
-      _tick++;
-      _attention.add(attention.toDouble());
-      _meditation.add(meditation.toDouble());
-      _currentEpochs.add(
-        SessionEpochRecord(
-          sequence: _currentEpochs.length,
-          capturedAt: DateTime.now(),
-          accepted: true,
-          signalQuality: 0,
-          manufacturerAttention: attention,
-          manufacturerMeditation: meditation,
-        ),
-      );
-      if (_attention.length > 30) _attention.removeAt(0);
-      if (_meditation.length > 30) _meditation.removeAt(0);
-    });
+  void _appendDemonstrationReading() {
+    final index = _readings.length;
+    final closed = _phase == CollectionPhase.eyesClosed;
+    final attention = (closed ? 48 : 61) +
+        (math.sin(index * 0.75) * 11).round() +
+        (index % 4);
+    final meditation =
+        (closed ? 72 : 53) + (math.cos(index * 0.55) * 9).round();
+    final poorSignal = 12 + (math.sin(index * 0.4).abs() * 22).round();
+    _readings.add(
+      _Reading(
+        attention: attention.clamp(0, 100),
+        meditation: meditation.clamp(0, 100),
+        signalQuality: poorSignal,
+      ),
+    );
   }
 
   void _onHardwareData(EEGData data) {
-    if (!mounted || !_sessionActive || _mode != AcquisitionMode.hardware) {
+    if (!mounted ||
+        _step != CollectionStep.running ||
+        _mode != AcquisitionMode.hardware) {
       return;
     }
-    final accepted = data.signalQuality != null && data.signalQuality! <= 50;
-    final epoch = SessionEpochRecord(
-      sequence: _currentEpochs.length,
-      capturedAt: data.timestamp,
-      accepted: accepted,
-      rejectionReason: accepted
-          ? null
-          : data.signalQuality == null
-              ? 'Qualidade do sinal ainda não medida.'
-              : 'Qualidade do sinal insuficiente; reposicione o sensor.',
-      signalQuality: data.signalQuality,
-      manufacturerAttention: accepted ? data.attention : null,
-      manufacturerMeditation: accepted ? data.meditation : null,
-    );
     setState(() {
-      _currentEpochs.add(epoch);
-      if (accepted && data.attention != null) {
-        _attention.add(data.attention!.toDouble());
-        if (_attention.length > 30) _attention.removeAt(0);
-      }
-      if (accepted && data.meditation != null) {
-        _meditation.add(data.meditation!.toDouble());
-        if (_meditation.length > 30) _meditation.removeAt(0);
-      }
-    });
-  }
-
-  Future<void> _finishSession() async {
-    if (!_sessionActive) return;
-    _timer?.cancel();
-    final endedAt = DateTime.now();
-    final startedAt = _sessionStartedAt ?? endedAt;
-    final sessionId = 'session_${startedAt.millisecondsSinceEpoch}';
-    final deviceLabel = _mode == AcquisitionMode.demonstration
-        ? 'Demonstração com dados simulados'
-        : 'BrainLink Lite';
-    final average = _attention.isEmpty
-        ? null
-        : _attention.reduce((a, b) => a + b) / _attention.length;
-    final journal = ContextJournalEntry(
-      id: 'journal_${endedAt.millisecondsSinceEpoch}',
-      recordedAt: endedAt,
-      sleepHours: _sleepHours,
-      medicationTaken: switch (_medication) {
-        'Não utilizada' => false,
-        'Utilizada conforme orientação' => true,
-        _ => null,
-      },
-      medicationNote: _medication == 'Não informado' ? null : _medication,
-      moodLevel: const [
-            'Muito baixo',
-            'Baixo',
-            'Neutro',
-            'Elevado',
-            'Muito elevado',
-          ].indexOf(_mood) +
-          1,
-      task: _task,
-    );
-    final metadata = SessionMetadata(
-      sessionId: sessionId,
-      startedAt: startedAt,
-      endedAt: endedAt,
-      pipelineVersion: _pipelineVersion,
-      deviceLabel: deviceLabel,
-      sampleRateHz: _mode == AcquisitionMode.hardware ? 128 : null,
-    );
-    setState(() {
-      _sessionActive = false;
-      _lastMetadata = metadata;
-      _lastEpochs = List<SessionEpochRecord>.unmodifiable(_currentEpochs);
-      _lastJournal = journal;
-      _history.insert(
-        0,
-        _SessionEntry(
-          date: startedAt,
-          source: _mode == AcquisitionMode.demonstration
-              ? 'Demonstração'
-              : 'BrainLink Lite',
-          sleepHours: _sleepHours,
-          mood: _mood,
-          medication: _medication,
-          task: _task,
-          manufacturerMean: average,
+      _readings.add(
+        _Reading(
+          attention: data.attention,
+          meditation: data.meditation,
+          signalQuality: data.signalQuality,
         ),
       );
     });
-    final store = _store;
-    if (store != null) {
-      try {
-        await store.createSession(
-          sessionId: sessionId,
-          startedAt: startedAt,
-          pipelineVersion: _pipelineVersion,
-          deviceLabel: deviceLabel,
-          sampleRateHz: metadata.sampleRateHz,
-        );
-        for (final epoch in _lastEpochs) {
-          await store.appendEpoch(sessionId, epoch);
-        }
-        await store.appendEvent(sessionId, SessionEventRecord.journal(journal));
-        await store.finishSession(sessionId, endedAt);
-      } on Object catch (error) {
-        if (mounted) {
-          _message('Sessão mantida na tela; falha ao salvar: $error');
-        }
-        return;
-      }
-    }
-    if (mounted) _message('Sessão registrada no histórico local.');
   }
 
-  void _fillExample() {
-    const example = [
-      AsrsResponse.often,
-      AsrsResponse.sometimes,
-      AsrsResponse.sometimes,
-      AsrsResponse.often,
-      AsrsResponse.rarely,
-      AsrsResponse.often,
-    ];
+  void _finishCollection() {
+    _timer?.cancel();
+    if (!mounted) return;
     setState(() {
-      for (var index = 0; index < example.length; index++) {
-        _answers[index] = example[index];
-      }
+      _endedAt = DateTime.now();
+      _step = CollectionStep.result;
+    });
+    _signalUser(strong: true);
+  }
+
+  void _signalUser({bool strong = false}) {
+    unawaited(
+      (strong ? HapticFeedback.heavyImpact() : HapticFeedback.mediumImpact())
+          .catchError((_) {}),
+    );
+    unawaited(SystemSound.play(SystemSoundType.alert).catchError((_) {}));
+  }
+
+  void _reset() {
+    _timer?.cancel();
+    setState(() {
+      _step = CollectionStep.choice;
+      _mode = null;
+      _phase = CollectionPhase.eyesOpen;
+      _phaseElapsed = Duration.zero;
+      _showHardware = false;
+      _readings.clear();
+      _startedAt = null;
+      _endedAt = null;
+      _exportMessage = null;
+      _connectionMessage = null;
     });
   }
 
-  void _clearAnswers() {
-    setState(() {
-      for (var index = 0; index < _answers.length; index++) {
-        _answers[index] = null;
-      }
-    });
-  }
-
-  bool get _asrsComplete => _answers.every((answer) => answer != null);
-
-  AsrsScreenerResult? _questionnaireResult() {
-    if (!_asrsComplete) return null;
-    return AsrsScreenerResult(
-      id: 'asrs_${DateTime.now().millisecondsSinceEpoch}',
-      completedAt: DateTime.now(),
-      responses: _answers.cast<AsrsResponse>(),
+  GuidedCollectionReportData? get _report {
+    final startedAt = _startedAt;
+    final endedAt = _endedAt;
+    if (startedAt == null || endedAt == null) return null;
+    return GuidedCollectionReportData(
+      startedAt: startedAt,
+      endedAt: endedAt,
+      source: _mode == AcquisitionMode.hardware
+          ? 'BrainLink Lite'
+          : 'Demonstração com dados simulados',
+      qualityScore: _qualityScore,
+      qualityLabel: _qualityLabel,
+      readingCount: _readings.length,
+      attentionMean: _displayAttentionMean,
+      meditationMean: _displayMeditationMean,
     );
   }
 
-  SessionReportData? _reportData() {
-    final questionnaire = _questionnaireResult();
-    if (_lastMetadata == null && questionnaire == null) return null;
-    final now = DateTime.now();
-    return SessionReportData(
-      metadata: _lastMetadata ??
-          SessionMetadata(
-            sessionId: 'screening_${now.millisecondsSinceEpoch}',
-            startedAt: now,
-            endedAt: now,
-            pipelineVersion: _pipelineVersion,
-            deviceLabel: 'Sem sessão de EEG',
-          ),
-      epochs: _lastEpochs,
-      journalEntries: _lastJournal == null
-          ? const []
-          : <ContextJournalEntry>[_lastJournal!],
-      questionnaire: questionnaire,
-    );
-  }
-
-  String? _reportText() {
-    final data = _reportData();
-    return data == null ? null : _reportExporter.buildText(data);
-  }
-
-  Future<void> _exportReport() async {
-    final data = _reportData();
-    if (data == null) return;
-    if (_store == null) await _initializeStore();
-    final root = _storageRoot;
-    if (root == null) {
-      _message(
-          'A exportação de arquivo está disponível no aplicativo Android.');
-      return;
-    }
+  Future<void> _export() async {
+    final report = _report;
+    if (report == null) return;
+    setState(() => _exportMessage = 'Preparando arquivo…');
     try {
-      final questionnaire = data.questionnaire;
-      if (questionnaire != null) await _store?.saveQuestionnaire(questionnaire);
-      final files = await _reportExporter.export(
-        data,
-        Directory('${root.path}${Platform.pathSeparator}exports'),
+      final root = await _bridge.getStorageRoot();
+      if (root == null || root.isEmpty) {
+        throw StateError('Armazenamento indisponível.');
+      }
+      final files = await _exporter.export(
+        report,
+        Directory('$root${Platform.pathSeparator}exports'),
       );
-      final html = files.firstWhere((file) => file.path.endsWith('.html'));
-      final shared = await _bridge.shareFile(html.path, mimeType: 'text/html');
+      final shared = await _bridge.shareFile(files.first.path);
       if (!mounted) return;
-      setState(() => _lastExportPath = html.path);
-      _message(shared
-          ? 'Relatório HTML gerado. Escolha onde compartilhar.'
-          : 'Relatório HTML gerado em ${html.path}.');
-    } on Object catch (error) {
-      if (mounted) _message('Não foi possível exportar o relatório: $error');
+      setState(() => _exportMessage = shared
+          ? 'Resultado pronto para compartilhar.'
+          : 'Resultado salvo em ${files.first.path}');
+    } on Object {
+      if (mounted) {
+        setState(() => _exportMessage =
+            'Não foi possível exportar agora. A coleta continua nesta tela.');
+      }
     }
   }
 
-  void _message(String text) {
+  void _message(String message) {
     ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(text)));
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
-    final screens = [
-      _HomePage(
-        mode: _mode,
-        devices: _devices,
-        scanning: _scanning,
-        connecting: _connecting,
-        connected: _connected,
-        connectionMessage: _connectionMessage,
-        onMode: (value) => setState(() => _mode = value),
-        onScan: _scan,
-        onConnect: _connect,
-        onContinue: () => setState(() => _page = 1),
-      ),
-      _SessionPage(
-        mode: _mode,
-        connected: _connected,
-        active: _sessionActive,
-        startedAt: _sessionStartedAt,
-        attention: _attention,
-        meditation: _meditation,
-        sleepHours: _sleepHours,
-        mood: _mood,
-        medication: _medication,
-        task: _task,
-        onSleep: (value) => setState(() => _sleepHours = value),
-        onMood: (value) => setState(() => _mood = value),
-        onMedication: (value) => setState(() => _medication = value),
-        onTask: (value) => setState(() => _task = value),
-        onToggle: _sessionActive ? _finishSession : _startSession,
-      ),
-      _AsrsPage(
-        answers: _answers,
-        onAnswer: (index, value) => setState(() => _answers[index] = value),
-        onFillExample: _fillExample,
-        onClear: _clearAnswers,
-      ),
-      _ReportPage(
-        answers: _answers,
-        history: _history,
-        reportText: _reportText(),
-        onExport: _exportReport,
-        exportedPath: _lastExportPath,
-        onOpenAsrs: () => setState(() => _page = 2),
-        onOpenSession: () => setState(() => _page = 1),
-      ),
-    ];
     return Scaffold(
       appBar: AppBar(
-        toolbarHeight: 68,
+        titleSpacing: 20,
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'BRAINLINK DIÁRIO',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1,
-              ),
+              'Projeto BrainLink',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
             ),
             Text(
-              'Autorregistro para adultos (18+)',
-              style: TextStyle(color: Color(0xFF91A0B5), fontSize: 12),
+              'Coleta guiada',
+              style: TextStyle(fontSize: 11, color: Color(0xFFAAB8CA)),
             ),
           ],
         ),
-        actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 16),
-            child: Tooltip(
-              message: 'Sem envio automático',
-              child: Row(
-                children: [
-                  Icon(Icons.lock_outline_rounded,
-                      size: 17, color: Color(0xFF83A4C5)),
-                  SizedBox(width: 5),
-                  Text('LOCAL',
-                      style: TextStyle(
-                          color: Color(0xFF93A7BA),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800)),
-                ],
+        actions: [
+          if (_step != CollectionStep.choice)
+            IconButton(
+              tooltip: 'Voltar ao início',
+              onPressed: _reset,
+              icon: const Icon(Icons.home_outlined),
+            ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 36),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 240),
+                child: switch (_step) {
+                  CollectionStep.choice => _choiceView(),
+                  CollectionStep.instructions => _instructionsView(),
+                  CollectionStep.running => _runningView(),
+                  CollectionStep.result => _resultView(),
+                },
               ),
             ),
           ),
-        ],
+        ),
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          if (constraints.maxWidth >= 900) {
-            return Row(
-              children: [
-                NavigationRail(
-                  selectedIndex: _page,
-                  onDestinationSelected: (value) =>
-                      setState(() => _page = value),
-                  labelType: NavigationRailLabelType.all,
-                  groupAlignment: -0.75,
-                  destinations: _railDestinations,
-                ),
-                const VerticalDivider(width: 1),
-                Expanded(child: screens[_page]),
-              ],
-            );
-          }
-          return screens[_page];
-        },
-      ),
-      bottomNavigationBar: MediaQuery.sizeOf(context).width < 900
-          ? NavigationBar(
-              selectedIndex: _page,
-              onDestinationSelected: (value) => setState(() => _page = value),
-              destinations: _destinations,
-            )
-          : null,
     );
+  }
+
+  Widget _choiceView() {
+    return Column(
+      key: const ValueKey('choice'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _Hero(),
+        const SizedBox(height: 22),
+        Text(
+          'Como deseja começar?',
+          style: Theme.of(context)
+              .textTheme
+              .titleLarge
+              ?.copyWith(fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Escolha uma opção. Todo o restante acontece nesta mesma tela.',
+          style: TextStyle(color: Color(0xFFAAB8CA)),
+        ),
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          onPressed: _chooseDemonstration,
+          icon: const Icon(Icons.play_circle_outline_rounded),
+          label: const Text('Ver demonstração'),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: _scanning ? null : _openHardware,
+          icon: const Icon(Icons.bluetooth_searching_rounded),
+          label: const Text('Conectar BrainLink'),
+        ),
+        if (_showHardware) ...[
+          const SizedBox(height: 16),
+          _hardwarePanel(),
+        ],
+        const SizedBox(height: 18),
+        const _Notice(
+          icon: Icons.verified_user_outlined,
+          text:
+              'A nota final avalia a qualidade da coleta. Ela não avalia saúde, TDAH ou capacidade da pessoa.',
+        ),
+      ],
+    );
+  }
+
+  Widget _hardwarePanel() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.bluetooth_rounded, color: Color(0xFF7DB3FF)),
+                const SizedBox(width: 9),
+                const Expanded(
+                  child: Text(
+                    'Dispositivos encontrados',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _scanning ? null : _scan,
+                  icon: _scanning
+                      ? const SizedBox.square(
+                          dimension: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh_rounded),
+                  label: Text(_scanning ? 'Buscando' : 'Buscar'),
+                ),
+              ],
+            ),
+            const Text(
+              'Se não aparecer, abra o Bluetooth do Android, pareie “BrainLink” e volte ao app. Se pedir um código, use 0000.',
+              style: TextStyle(color: Color(0xFFAAB8CA), fontSize: 13),
+            ),
+            for (final device in _devices) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0D1828),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFF2A3A52)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.sensors_rounded),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            device.name,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          Text(
+                            device.isPaired ? 'Pareado' : 'Disponível',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF96A7BA),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    FilledButton(
+                      onPressed: _connecting ? null : () => _connect(device),
+                      child: Text(_connecting ? 'Aguarde' : 'Conectar'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (_connectionMessage != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _connectionMessage!,
+                style: const TextStyle(color: Color(0xFFD0DCE9)),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _instructionsView() {
+    final isHardware = _mode == AcquisitionMode.hardware;
+    final phaseText = isHardware ? '1 minuto' : '8 segundos';
+    return Column(
+      key: const ValueKey('instructions'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _StepHeader(
+          eyebrow: isHardware ? 'BRAINLINK CONECTADO' : 'DADOS SIMULADOS',
+          title: 'Antes de começar',
+          subtitle: isHardware
+              ? 'Prepare o sensor e siga duas etapas de $phaseText.'
+              : 'A demonstração reproduz rapidamente o mesmo fluxo do hardware.',
+        ),
+        const SizedBox(height: 18),
+        const _Instruction(
+          number: '1',
+          title: 'Ajuste o BrainLink',
+          text:
+              'Sensor metálico na testa, cerca de 1 a 2 cm acima da sobrancelha, e clipe em contato direto com o lóbulo da orelha.',
+        ),
+        const _Instruction(
+          number: '2',
+          title: 'Fique confortável',
+          text:
+              'Sente-se com apoio, mantenha testa e mandíbula relaxadas e evite falar, tocar no sensor ou movimentar a cabeça.',
+        ),
+        _Instruction(
+          number: '3',
+          title: 'Olhos abertos por $phaseText',
+          text:
+              'Olhe para um ponto fixo e pisque naturalmente. O app avisará a troca com som e vibração.',
+        ),
+        _Instruction(
+          number: '4',
+          title: 'Olhos fechados por $phaseText',
+          text:
+              'Depois do aviso, feche os olhos sem apertá-los e permaneça acordado e imóvel até o segundo aviso.',
+        ),
+        const SizedBox(height: 6),
+        const _Notice(
+          icon: Icons.volume_up_outlined,
+          text:
+              'Deixe o som ou a vibração do celular ativos. Não é preciso ficar de olhos fechados durante toda a sessão.',
+        ),
+        const SizedBox(height: 18),
+        FilledButton.icon(
+          onPressed: _startCollection,
+          icon: const Icon(Icons.play_arrow_rounded),
+          label: Text(isHardware
+              ? 'Começar teste de 2 minutos'
+              : 'Começar demonstração'),
+        ),
+      ],
+    );
+  }
+
+  Widget _runningView() {
+    final open = _phase == CollectionPhase.eyesOpen;
+    final currentQuality = _readings.isEmpty
+        ? null
+        : _readings
+            .lastWhere(
+              (reading) => reading.signalQuality != null,
+              orElse: () => const _Reading(),
+            )
+            .signalQuality;
+    final contact = switch (currentQuality) {
+      null => 'Aguardando sinal',
+      <= 50 => 'Contato bom',
+      < 200 => 'Ajuste o sensor',
+      _ => 'Sem contato',
+    };
+    return Column(
+      key: const ValueKey('running'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _StepHeader(
+          eyebrow: _mode == AcquisitionMode.hardware
+              ? 'COLETA COM HARDWARE'
+              : 'DEMONSTRAÇÃO',
+          title: open ? 'Mantenha os olhos abertos' : 'Agora feche os olhos',
+          subtitle: open
+              ? 'Olhe para um ponto fixo e permaneça relaxado.'
+              : 'Não aperte as pálpebras. Aguarde o aviso final.',
+        ),
+        const SizedBox(height: 22),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(22),
+            child: Column(
+              children: [
+                Icon(
+                  open
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                  size: 76,
+                  color: const Color(0xFF7DB3FF),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  _formatClock(_remainingSeconds),
+                  style: const TextStyle(
+                    fontSize: 52,
+                    fontWeight: FontWeight.w800,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+                Text(
+                  contact,
+                  style: TextStyle(
+                    color: currentQuality != null && currentQuality <= 50
+                        ? const Color(0xFF56D6B3)
+                        : const Color(0xFFFFC45C),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                LinearProgressIndicator(
+                  value: _totalProgress,
+                  minHeight: 8,
+                  borderRadius: BorderRadius.circular(8),
+                  backgroundColor: const Color(0xFF26354A),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Etapa ${open ? 1 : 2} de 2 · ${_readings.length} leituras',
+                  style: const TextStyle(color: Color(0xFFAAB8CA)),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        OutlinedButton.icon(
+          onPressed: _finishCollection,
+          icon: const Icon(Icons.stop_circle_outlined),
+          label: const Text('Encerrar agora'),
+        ),
+      ],
+    );
+  }
+
+  Widget _resultView() {
+    final score = _qualityScore;
+    return Column(
+      key: const ValueKey('result'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _StepHeader(
+          eyebrow: _mode == AcquisitionMode.hardware
+              ? 'RESULTADO DO BRAINLINK'
+              : 'RESULTADO SIMULADO',
+          title: 'Resultado da coleta',
+          subtitle:
+              'O velocímetro resume contato e continuidade do sinal recebido.',
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 18),
+            child: Column(
+              children: [
+                _QualityGauge(score: score),
+                Text(
+                  _qualityLabel,
+                  style: TextStyle(
+                    color: _qualityColor,
+                    fontSize: 23,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  switch (score) {
+                    null =>
+                      'Nenhuma informação de contato foi recebida. Reconecte e tente novamente.',
+                    >= 80 =>
+                      'O sensor manteve contato e recebeu dados de forma consistente.',
+                    >= 60 =>
+                      'A coleta pode ser usada, mas vale ajustar o sensor antes de repetir.',
+                    _ =>
+                      'Reposicione o sensor e o clipe e repita. Os índices ficam ocultos para não mostrar dados pouco confiáveis.',
+                  },
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Color(0xFFAAB8CA), height: 1.4),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: _MetricCard(
+                icon: Icons.track_changes_rounded,
+                label: 'Atenção do aparelho',
+                value: _formatMean(_displayAttentionMean),
+                color: const Color(0xFF67A7FF),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _MetricCard(
+                icon: Icons.spa_outlined,
+                label: 'Relaxamento do aparelho',
+                value: _formatMean(_displayMeditationMean),
+                color: const Color(0xFF56D6B3),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        const _Notice(
+          icon: Icons.info_outline_rounded,
+          text:
+              'A nota do velocímetro é da coleta, não da pessoa. Os dois índices são cálculos proprietários do fabricante e não avaliam saúde ou TDAH.',
+        ),
+        const SizedBox(height: 18),
+        FilledButton.icon(
+          onPressed: _export,
+          icon: const Icon(Icons.ios_share_rounded),
+          label: const Text('Exportar resultado'),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: () => setState(() {
+            _step = CollectionStep.instructions;
+            _readings.clear();
+            _startedAt = null;
+            _endedAt = null;
+            _exportMessage = null;
+          }),
+          icon: const Icon(Icons.replay_rounded),
+          label: const Text('Repetir coleta'),
+        ),
+        if (_exportMessage != null) ...[
+          const SizedBox(height: 12),
+          Text(
+            _exportMessage!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Color(0xFFAAB8CA)),
+          ),
+        ],
+      ],
+    );
+  }
+
+  static double? _mean(Iterable<int> values) {
+    final list = values.toList();
+    if (list.isEmpty) return null;
+    return list.reduce((a, b) => a + b) / list.length;
+  }
+
+  static String _formatMean(double? value) =>
+      value == null ? '—' : value.toStringAsFixed(0);
+
+  static String _formatClock(int totalSeconds) {
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 }
 
-const _destinations = [
-  NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Início'),
-  NavigationDestination(icon: Icon(Icons.show_chart_rounded), label: 'Sessão'),
-  NavigationDestination(icon: Icon(Icons.fact_check_outlined), label: 'ASRS'),
-  NavigationDestination(
-      icon: Icon(Icons.description_outlined), label: 'Relatório'),
-];
+class _Reading {
+  const _Reading({this.attention, this.meditation, this.signalQuality});
 
-const _railDestinations = [
-  NavigationRailDestination(
-      icon: Icon(Icons.home_outlined), label: Text('Início')),
-  NavigationRailDestination(
-      icon: Icon(Icons.show_chart_rounded), label: Text('Sessão')),
-  NavigationRailDestination(
-      icon: Icon(Icons.fact_check_outlined), label: Text('ASRS')),
-  NavigationRailDestination(
-      icon: Icon(Icons.description_outlined), label: Text('Relatório')),
-];
-
-class _HomePage extends StatelessWidget {
-  const _HomePage({
-    required this.mode,
-    required this.devices,
-    required this.scanning,
-    required this.connecting,
-    required this.connected,
-    required this.connectionMessage,
-    required this.onMode,
-    required this.onScan,
-    required this.onConnect,
-    required this.onContinue,
-  });
-
-  final AcquisitionMode mode;
-  final List<ConnectableDevice> devices;
-  final bool scanning;
-  final bool connecting;
-  final bool connected;
-  final String? connectionMessage;
-  final ValueChanged<AcquisitionMode> onMode;
-  final VoidCallback onScan;
-  final ValueChanged<ConnectableDevice> onConnect;
-  final VoidCallback onContinue;
-
-  @override
-  Widget build(BuildContext context) {
-    return _Page(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const _Hero(),
-          const SizedBox(height: 26),
-          const _Title(
-            'Como você quer usar agora?',
-            'Escolha um modo. A origem dos dados continua visível durante a sessão.',
-          ),
-          const SizedBox(height: 14),
-          LayoutBuilder(builder: (context, constraints) {
-            final cards = [
-              _ModeCard(
-                selected: mode == AcquisitionMode.demonstration,
-                icon: Icons.play_circle_outline_rounded,
-                title: 'Demonstração',
-                description:
-                    'Série simulada para apresentar gráfico, diário e relatório sem o headset.',
-                badge: 'DADOS SIMULADOS',
-                onTap: () => onMode(AcquisitionMode.demonstration),
-              ),
-              _ModeCard(
-                selected: mode == AcquisitionMode.hardware,
-                icon: Icons.bluetooth_searching_rounded,
-                title: 'Hardware',
-                description:
-                    'Busca dispositivos pareados e conecta ao BrainLink Lite por Bluetooth.',
-                badge: 'HARDWARE REAL',
-                onTap: () => onMode(AcquisitionMode.hardware),
-              ),
-            ];
-            if (constraints.maxWidth >= 640) {
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: cards[0]),
-                  const SizedBox(width: 14),
-                  Expanded(child: cards[1]),
-                ],
-              );
-            }
-            return Column(
-                children: [cards[0], const SizedBox(height: 12), cards[1]]);
-          }),
-          if (mode == AcquisitionMode.hardware) ...[
-            const SizedBox(height: 18),
-            _HardwareCard(
-              devices: devices,
-              scanning: scanning,
-              connecting: connecting,
-              connected: connected,
-              message: connectionMessage,
-              onScan: onScan,
-              onConnect: onConnect,
-            ),
-          ],
-          const SizedBox(height: 18),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: onContinue,
-              icon: const Icon(Icons.arrow_forward_rounded),
-              label: const Text('Abrir sessão e diário'),
-            ),
-          ),
-          const SizedBox(height: 22),
-          const _SeparationNotice(),
-        ],
-      ),
-    );
-  }
+  final int? attention;
+  final int? meditation;
+  final int? signalQuality;
 }
 
 class _Hero extends StatelessWidget {
@@ -784,37 +925,35 @@ class _Hero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
     return Container(
-      width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(24),
         gradient: const LinearGradient(
-          colors: [Color(0xFF183E67), Color(0xFF13283F)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1D4D7B), Color(0xFF12263E)],
         ),
-        border: Border.all(color: const Color(0xFF315C85)),
+        border: Border.all(color: const Color(0xFF35638E)),
       ),
-      child: Column(
+      child: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _Eyebrow('DIÁRIO LONGITUDINAL'),
-          const SizedBox(height: 10),
+          _Eyebrow('SIMPLES E GUIADO'),
+          SizedBox(height: 10),
           Text(
-            'Observe contexto, respostas e sinais ao longo do tempo.',
-            style: text.headlineSmall?.copyWith(
+            'Conecte, siga as instruções e veja o resultado.',
+            style: TextStyle(
               color: Colors.white,
+              fontSize: 27,
+              height: 1.15,
               fontWeight: FontWeight.w800,
-              height: 1.2,
             ),
           ),
-          const SizedBox(height: 9),
+          SizedBox(height: 10),
           Text(
-            'Organize autorregistros para apoiar uma conversa com profissional de saúde. Uso destinado a adultos com 18 anos ou mais.',
-            style: text.bodyMedium?.copyWith(
-              color: const Color(0xFFD1DFEE),
-              height: 1.5,
-            ),
+            'O app orienta cada etapa e mostra a qualidade da coleta em um velocímetro fácil de entender.',
+            style: TextStyle(color: Color(0xFFD2E0EE), height: 1.45),
           ),
         ],
       ),
@@ -822,1082 +961,313 @@ class _Hero extends StatelessWidget {
   }
 }
 
-class _ModeCard extends StatelessWidget {
-  const _ModeCard({
-    required this.selected,
-    required this.icon,
+class _StepHeader extends StatelessWidget {
+  const _StepHeader({
+    required this.eyebrow,
     required this.title,
-    required this.description,
-    required this.badge,
-    required this.onTap,
-  });
-
-  final bool selected;
-  final IconData icon;
-  final String title;
-  final String description;
-  final String badge;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFF172B43) : theme.colorScheme.surface,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color:
-                selected ? theme.colorScheme.primary : const Color(0xFF25334A),
-            width: selected ? 1.5 : 1,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              Icon(icon, color: const Color(0xFF7DB3FF), size: 28),
-              const Spacer(),
-              Icon(
-                selected ? Icons.check_circle_rounded : Icons.circle_outlined,
-                color: selected
-                    ? theme.colorScheme.primary
-                    : const Color(0xFF67758A),
-              ),
-            ]),
-            const SizedBox(height: 14),
-            Text(title,
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 6),
-            Text(description,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: const Color(0xFFAAB8CA), height: 1.4)),
-            const SizedBox(height: 12),
-            _Pill(badge),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _HardwareCard extends StatelessWidget {
-  const _HardwareCard({
-    required this.devices,
-    required this.scanning,
-    required this.connecting,
-    required this.connected,
-    required this.message,
-    required this.onScan,
-    required this.onConnect,
-  });
-
-  final List<ConnectableDevice> devices;
-  final bool scanning;
-  final bool connecting;
-  final bool connected;
-  final String? message;
-  final VoidCallback onScan;
-  final ValueChanged<ConnectableDevice> onConnect;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              const Icon(Icons.bluetooth_rounded, color: Color(0xFF7DB3FF)),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Text('Conectar dispositivo',
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w800)),
-              ),
-              TextButton.icon(
-                onPressed: scanning ? null : onScan,
-                icon: scanning
-                    ? const SizedBox.square(
-                        dimension: 15,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.refresh_rounded),
-                label: Text(scanning ? 'Buscando' : 'Buscar'),
-              ),
-            ]),
-            const SizedBox(height: 7),
-            Text(
-              'Dispositivos pareados aparecem primeiro. Outros dispositivos próximos surgem durante a busca.',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: const Color(0xFFAAB8CA), height: 1.4),
-            ),
-            if (devices.isEmpty && !scanning) ...[
-              const SizedBox(height: 14),
-              const _Empty(
-                Icons.bluetooth_disabled_rounded,
-                'Nenhum dispositivo listado',
-                'Toque em Buscar para consultar dispositivos pareados.',
-              ),
-            ],
-            for (final device in devices) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0D1828),
-                  borderRadius: BorderRadius.circular(13),
-                  border: Border.all(color: const Color(0xFF2A3A52)),
-                ),
-                child: Row(children: [
-                  const Icon(Icons.headphones_rounded,
-                      color: Color(0xFF8BBEFF)),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(device.name,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w700)),
-                        Text(device.isPaired ? 'Pareado' : 'Disponível',
-                            style: theme.textTheme.bodySmall
-                                ?.copyWith(color: const Color(0xFF93A5BB))),
-                      ],
-                    ),
-                  ),
-                  FilledButton(
-                    onPressed: connecting || connected
-                        ? null
-                        : () => onConnect(device),
-                    child: Text(connected
-                        ? 'Conectado'
-                        : connecting
-                            ? 'Conectando'
-                            : 'Conectar'),
-                  ),
-                ]),
-              ),
-            ],
-            if (message != null) ...[
-              const SizedBox(height: 12),
-              _Info(message!),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SessionPage extends StatelessWidget {
-  const _SessionPage({
-    required this.mode,
-    required this.connected,
-    required this.active,
-    required this.startedAt,
-    required this.attention,
-    required this.meditation,
-    required this.sleepHours,
-    required this.mood,
-    required this.medication,
-    required this.task,
-    required this.onSleep,
-    required this.onMood,
-    required this.onMedication,
-    required this.onTask,
-    required this.onToggle,
-  });
-
-  final AcquisitionMode mode;
-  final bool connected;
-  final bool active;
-  final DateTime? startedAt;
-  final List<double> attention;
-  final List<double> meditation;
-  final double sleepHours;
-  final String mood;
-  final String medication;
-  final String task;
-  final ValueChanged<double> onSleep;
-  final ValueChanged<String> onMood;
-  final ValueChanged<String> onMedication;
-  final ValueChanged<String> onTask;
-  final VoidCallback onToggle;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final hasData = attention.isNotEmpty;
-    final source = mode == AcquisitionMode.demonstration
-        ? 'Dados simulados'
-        : connected
-            ? 'BrainLink Lite • dados reais'
-            : 'Hardware ainda não conectado';
-    return _Page(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Expanded(child: _Title('Sessão de observação', source)),
-            const SizedBox(width: 8),
-            _Pill(active ? 'EM EXECUÇÃO' : 'INATIVA',
-                color:
-                    active ? const Color(0xFF67D5B5) : const Color(0xFF8493A6)),
-          ]),
-          const SizedBox(height: 14),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Diário de contexto',
-                      style: theme.textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 4),
-                  Text(
-                    'As condições aparecem no histórico sem atribuir causa aos sinais.',
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: const Color(0xFF9EADBF)),
-                  ),
-                  const SizedBox(height: 14),
-                  Text('Sono: ${sleepHours.toStringAsFixed(1)} horas'),
-                  Slider(
-                    value: sleepHours,
-                    min: 0,
-                    max: 12,
-                    divisions: 24,
-                    onChanged: active ? null : onSleep,
-                  ),
-                  LayoutBuilder(builder: (context, constraints) {
-                    final width = constraints.maxWidth >= 680
-                        ? (constraints.maxWidth - 24) / 3
-                        : constraints.maxWidth;
-                    return Wrap(spacing: 12, runSpacing: 12, children: [
-                      SizedBox(
-                        width: width,
-                        child: _Dropdown(
-                          'Humor',
-                          mood,
-                          const [
-                            'Muito baixo',
-                            'Baixo',
-                            'Neutro',
-                            'Elevado',
-                            'Muito elevado'
-                          ],
-                          enabled: !active,
-                          onChanged: onMood,
-                        ),
-                      ),
-                      SizedBox(
-                        width: width,
-                        child: _Dropdown(
-                          'Medicação',
-                          medication,
-                          const [
-                            'Não informado',
-                            'Não utilizada',
-                            'Utilizada conforme orientação'
-                          ],
-                          enabled: !active,
-                          onChanged: onMedication,
-                        ),
-                      ),
-                      SizedBox(
-                        width: width,
-                        child: _Dropdown(
-                          'Tipo de tarefa',
-                          task,
-                          const [
-                            'Rotina',
-                            'Estudo',
-                            'Trabalho',
-                            'Leitura',
-                            'Descanso'
-                          ],
-                          enabled: !active,
-                          onChanged: onTask,
-                        ),
-                      ),
-                    ]);
-                  }),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          const _Title(
-            'EEG descritivo',
-            'Índices do fabricante (algoritmo proprietário) • escala de 0 a 100',
-          ),
-          const SizedBox(height: 10),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(children: [
-                SizedBox(
-                  height: 210,
-                  width: double.infinity,
-                  child: hasData
-                      ? _Chart(attention, meditation)
-                      : const _Empty(
-                          Icons.show_chart_rounded,
-                          'Sem dados nesta sessão',
-                          'Inicie a coleta para visualizar a série temporal.',
-                        ),
-                ),
-                const SizedBox(height: 10),
-                const Wrap(spacing: 18, runSpacing: 6, children: [
-                  _Legend(Color(0xFF67A7FF), 'Attention • fabricante'),
-                  _Legend(Color(0xFF67D5B5), 'Meditation • fabricante'),
-                ]),
-                const SizedBox(height: 14),
-                Row(children: [
-                  Expanded(
-                    child: _Value('Attention',
-                        hasData ? attention.last.round().toString() : '—'),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _Value(
-                        'Meditation',
-                        meditation.isNotEmpty
-                            ? meditation.last.round().toString()
-                            : '—'),
-                  ),
-                ]),
-              ]),
-            ),
-          ),
-          const SizedBox(height: 12),
-          const _Info(
-            'Estes valores descrevem a saída do dispositivo. Não existe classificação positiva ou negativa, nem comparação com outras pessoas.',
-          ),
-          const SizedBox(height: 18),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: onToggle,
-              icon: Icon(active
-                  ? Icons.stop_circle_outlined
-                  : Icons.play_arrow_rounded),
-              label: Text(active ? 'Finalizar e registrar' : 'Iniciar sessão'),
-            ),
-          ),
-          if (active && startedAt != null) ...[
-            const SizedBox(height: 7),
-            Center(child: Text('Iniciada às ${_time(startedAt!)}')),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _AsrsPage extends StatelessWidget {
-  const _AsrsPage({
-    required this.answers,
-    required this.onAnswer,
-    required this.onFillExample,
-    required this.onClear,
-  });
-
-  final List<AsrsResponse?> answers;
-  final void Function(int, AsrsResponse?) onAnswer;
-  final VoidCallback onFillExample;
-  final VoidCallback onClear;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final complete = answers.every((answer) => answer != null);
-    final answered = answers.whereType<AsrsResponse>().length;
-    final score =
-        complete ? AsrsScreener6.score(answers.cast<AsrsResponse>()) : null;
-    return _Page(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const _Title(
-            'ASRS v1.1 • 6 perguntas',
-            'Escala validada de rastreio para adultos (18+) • considere os últimos 6 meses',
-          ),
-          const SizedBox(height: 12),
-          const _Info(
-            'Esta é a camada validada do aplicativo. Ela permanece separada dos registros descritivos do dispositivo.',
-          ),
-          const SizedBox(height: 8),
-          Text(
-            AsrsScreener6.attribution,
-            style: const TextStyle(
-              color: Color(0xFF8798AD),
-              fontSize: 11,
-              height: 1.35,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Row(children: [
-            Expanded(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                    value: answered / AsrsScreener6.items.length, minHeight: 8),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Text('$answered/6 respondidas'),
-          ]),
-          const SizedBox(height: 16),
-          for (var index = 0; index < AsrsScreener6.items.length; index++) ...[
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(17),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${AsrsScreener6.items[index].number}. '
-                      '${AsrsScreener6.items[index].text}',
-                      style: theme.textTheme.bodyMedium
-                          ?.copyWith(fontWeight: FontWeight.w600, height: 1.4),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<AsrsResponse>(
-                      key: ValueKey('asrs-$index-${answers[index]}'),
-                      initialValue: answers[index],
-                      decoration: const InputDecoration(
-                          labelText: 'Frequência',
-                          border: OutlineInputBorder()),
-                      isExpanded: true,
-                      items: [
-                        for (final answer in AsrsResponse.values)
-                          DropdownMenuItem(
-                              value: answer, child: Text(answer.label)),
-                      ],
-                      onChanged: (value) => onAnswer(index, value),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 9),
-          ],
-          Row(children: [
-            TextButton.icon(
-              onPressed: onClear,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Limpar'),
-            ),
-            const Spacer(),
-            TextButton.icon(
-              onPressed: onFillExample,
-              icon: const Icon(Icons.science_outlined),
-              label: const Text('Usar exemplo'),
-            ),
-          ]),
-          const SizedBox(height: 12),
-          if (complete)
-            _AsrsResult(
-              score!,
-              meritsAttention: score >= AsrsScreener6.attentionThreshold,
-            )
-          else
-            const _Empty(
-              Icons.fact_check_outlined,
-              'Resultado ainda indisponível',
-              'Responda as 6 perguntas para calcular a pontuação.',
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AsrsResult extends StatelessWidget {
-  const _AsrsResult(this.score, {required this.meritsAttention});
-
-  final int score;
-  final bool meritsAttention;
-
-  @override
-  Widget build(BuildContext context) {
-    final accent =
-        meritsAttention ? const Color(0xFFFFC76B) : const Color(0xFF74CDB5);
-    final message = meritsAttention
-        ? AsrsScreener6.attentionMessage
-        : AsrsScreener6.belowThresholdMessage;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(17),
-        border: Border.all(color: accent.withValues(alpha: 0.55)),
-      ),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(Icons.chat_bubble_outline_rounded, color: accent, size: 29),
-        const SizedBox(width: 14),
-        Expanded(
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('$score/6 respostas de rastreio',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w900)),
-            const SizedBox(height: 7),
-            Text(message, style: const TextStyle(height: 1.45)),
-            const SizedBox(height: 8),
-            const Text(
-              'A pontuação organiza o rastreio e não confirma nem exclui uma condição de saúde.',
-              style: TextStyle(
-                  color: Color(0xFF9DADBF), fontSize: 12, height: 1.4),
-            ),
-          ]),
-        ),
-      ]),
-    );
-  }
-}
-
-class _ReportPage extends StatelessWidget {
-  const _ReportPage({
-    required this.answers,
-    required this.history,
-    required this.reportText,
-    required this.onExport,
-    required this.exportedPath,
-    required this.onOpenAsrs,
-    required this.onOpenSession,
-  });
-
-  final List<AsrsResponse?> answers;
-  final List<_SessionEntry> history;
-  final String? reportText;
-  final VoidCallback onExport;
-  final String? exportedPath;
-  final VoidCallback onOpenAsrs;
-  final VoidCallback onOpenSession;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final complete = answers.every((answer) => answer != null);
-    final score =
-        complete ? AsrsScreener6.score(answers.cast<AsrsResponse>()) : null;
-    return _Page(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const _Title(
-            'Histórico e relatório',
-            'Exportação somente quando você solicita • dados mantidos nesta execução',
-          ),
-          const SizedBox(height: 12),
-          const _SeparationNotice(),
-          const SizedBox(height: 16),
-          _LayerCard(
-            'CAMADA 1 • ESCALA VALIDADA',
-            complete
-                ? 'ASRS v1.1: $score/6 respostas de rastreio'
-                : 'ASRS ainda não concluída',
-            complete
-                ? (score! >= AsrsScreener6.attentionThreshold
-                    ? AsrsScreener6.attentionMessage
-                    : AsrsScreener6.belowThresholdMessage)
-                : 'Conclua as seis respostas para incluir esta seção.',
-            Icons.fact_check_outlined,
-            action: complete ? null : onOpenAsrs,
-            actionLabel: 'Responder agora',
-          ),
-          const SizedBox(height: 12),
-          _LayerCard(
-            'CAMADA 2 • EEG DESCRITIVO',
-            history.isEmpty
-                ? 'Nenhuma sessão registrada'
-                : '${history.length} ${history.length == 1 ? 'sessão' : 'sessões'} no histórico',
-            history.isEmpty
-                ? 'Registre uma sessão para incluir contexto e índices do fabricante.'
-                : 'Autorregistro do próprio usuário, sem comparação populacional.',
-            Icons.show_chart_rounded,
-            action: history.isEmpty ? onOpenSession : null,
-            actionLabel: 'Abrir sessão',
-          ),
-          if (history.isNotEmpty) ...[
-            const SizedBox(height: 18),
-            Text('Sessões recentes',
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 8),
-            for (final entry in history) ...[
-              _History(entry),
-              const SizedBox(height: 7),
-            ],
-          ],
-          const SizedBox(height: 18),
-          Text('Prévia da exportação',
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w800)),
-          const SizedBox(height: 8),
-          Container(
-            width: double.infinity,
-            constraints: const BoxConstraints(minHeight: 150),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0A1421),
-              borderRadius: BorderRadius.circular(13),
-              border: Border.all(color: const Color(0xFF25334A)),
-            ),
-            child: SelectableText(
-              reportText ??
-                  'A prévia será gerada depois que houver uma sessão ou um screener concluído.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                  color: const Color(0xFFB7C4D4),
-                  height: 1.5,
-                  fontFamily: 'monospace'),
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: reportText == null ? null : onExport,
-              icon: const Icon(Icons.ios_share_rounded),
-              label: const Text('Exportar relatório HTML'),
-            ),
-          ),
-          const SizedBox(height: 7),
-          Center(
-            child: Text(
-              exportedPath == null
-                  ? 'O arquivo só é criado quando você toca em exportar.'
-                  : 'Arquivo gerado: $exportedPath',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Color(0xFF8E9EB2),
-                fontSize: 12,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LayerCard extends StatelessWidget {
-  const _LayerCard(
-    this.eyebrow,
-    this.title,
-    this.description,
-    this.icon, {
-    this.action,
-    required this.actionLabel,
+    required this.subtitle,
   });
 
   final String eyebrow;
   final String title;
-  final String description;
-  final IconData icon;
-  final VoidCallback? action;
-  final String actionLabel;
+  final String subtitle;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(17),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          CircleAvatar(
-            backgroundColor: const Color(0xFF1B3553),
-            child: Icon(icon, color: const Color(0xFF82B8FF)),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _Eyebrow(eyebrow),
+        const SizedBox(height: 8),
+        Text(
+          title,
+          style: Theme.of(context)
+              .textTheme
+              .headlineSmall
+              ?.copyWith(fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 5),
+        Text(subtitle, style: const TextStyle(color: Color(0xFFAAB8CA))),
+      ],
+    );
+  }
+}
+
+class _Instruction extends StatelessWidget {
+  const _Instruction({
+    required this.number,
+    required this.title,
+    required this.text,
+  });
+
+  final String number;
+  final String title;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(15),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF315F8C),
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  number,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: const TextStyle(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 4),
+                    Text(
+                      text,
+                      style: const TextStyle(
+                        color: Color(0xFFAAB8CA),
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 13),
-          Expanded(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              _Eyebrow(eyebrow),
-              const SizedBox(height: 6),
-              Text(title,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 6),
-              Text(description,
-                  style: const TextStyle(
-                      color: Color(0xFFAAB8CA), fontSize: 12, height: 1.4)),
-              if (action != null)
-                TextButton(onPressed: action, child: Text(actionLabel)),
-            ]),
-          ),
-        ]),
+        ),
       ),
     );
   }
 }
 
-class _History extends StatelessWidget {
-  const _History(this.entry);
-  final _SessionEntry entry;
+class _Notice extends StatelessWidget {
+  const _Notice({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF111C2E),
+        color: const Color(0xFF10233A),
         borderRadius: BorderRadius.circular(13),
-        border: Border.all(color: const Color(0xFF25334A)),
+        border: Border.all(color: const Color(0xFF2B4F72)),
       ),
-      child: Row(children: [
-        const Icon(Icons.history_rounded, color: Color(0xFF8BBEFF)),
-        const SizedBox(width: 10),
-        Expanded(
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('${_dateTime(entry.date)} • ${entry.source}',
-                style: const TextStyle(fontWeight: FontWeight.w700)),
-            Text(
-                '${entry.sleepHours.toStringAsFixed(1)} h de sono • ${entry.mood} • ${entry.task}',
-                style: const TextStyle(color: Color(0xFF96A6BA), fontSize: 12)),
-          ]),
-        ),
-        Text(entry.manufacturerMean?.toStringAsFixed(1) ?? '—',
-            style: const TextStyle(fontWeight: FontWeight.w800)),
-      ]),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: const Color(0xFF7DB3FF), size: 21),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(color: Color(0xFFC9D8E7), height: 1.4),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _Chart extends StatelessWidget {
-  const _Chart(this.attention, this.meditation);
-  final List<double> attention;
-  final List<double> meditation;
+class _MetricCard extends StatelessWidget {
+  const _MetricCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color),
+            const SizedBox(height: 10),
+            Text(
+              value,
+              style: TextStyle(
+                color: color,
+                fontSize: 30,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xFFAAB8CA),
+                fontSize: 12,
+                height: 1.25,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _QualityGauge extends StatelessWidget {
+  const _QualityGauge({required this.score});
+
+  final int? score;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      label:
-          'Gráfico com ${attention.length} amostras simuladas dos índices do fabricante.',
-      child: CustomPaint(painter: _ChartPainter(attention, meditation)),
+      label: score == null
+          ? 'Qualidade da coleta sem dado'
+          : 'Qualidade da coleta $score de 100',
+      child: SizedBox(
+        height: 205,
+        width: double.infinity,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Positioned.fill(child: CustomPaint(painter: _GaugePainter(score))),
+            Positioned(
+              bottom: 5,
+              child: Column(
+                children: [
+                  Text(
+                    score?.toString() ?? '—',
+                    style: const TextStyle(
+                      fontSize: 52,
+                      height: 1,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const Text(
+                    'de 100',
+                    style: TextStyle(color: Color(0xFFAAB8CA)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
 
-class _ChartPainter extends CustomPainter {
-  const _ChartPainter(this.attention, this.meditation);
-  final List<double> attention;
-  final List<double> meditation;
+class _GaugePainter extends CustomPainter {
+  const _GaugePainter(this.score);
+
+  final int? score;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final grid = Paint()
-      ..color = const Color(0xFF26374C)
-      ..strokeWidth = 1;
-    for (var index = 0; index <= 4; index++) {
-      final y = size.height * index / 4;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
+    final center = Offset(size.width / 2, size.height - 34);
+    final radius = math.min(size.width / 2 - 24, size.height - 54);
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    const gap = 0.025;
+    final arcPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 24
+      ..strokeCap = StrokeCap.butt;
+
+    arcPaint.color = const Color(0xFFFF6675);
+    canvas.drawArc(rect, math.pi, math.pi * (0.6 - gap), false, arcPaint);
+    arcPaint.color = const Color(0xFFFFC45C);
+    canvas.drawArc(
+      rect,
+      math.pi * 1.6,
+      math.pi * (0.2 - gap),
+      false,
+      arcPaint,
+    );
+    arcPaint.color = const Color(0xFF56D6B3);
+    canvas.drawArc(
+      rect,
+      math.pi * 1.8,
+      math.pi * 0.2,
+      false,
+      arcPaint,
+    );
+
+    _label(canvas, center + Offset(-radius, 25), '0');
+    _label(canvas, center + Offset(0, -radius - 20), '50');
+    _label(canvas, center + Offset(radius, 25), '100');
+
+    if (score != null) {
+      final angle = math.pi + math.pi * score!.clamp(0, 100) / 100;
+      final needleEnd = center +
+          Offset(
+            math.cos(angle) * (radius - 28),
+            math.sin(angle) * (radius - 28),
+          );
+      canvas.drawLine(
+        center,
+        needleEnd,
+        Paint()
+          ..color = Colors.white
+          ..strokeWidth = 5
+          ..strokeCap = StrokeCap.round,
+      );
+      canvas.drawCircle(center, 9, Paint()..color = Colors.white);
+      canvas.drawCircle(center, 4, Paint()..color = const Color(0xFF172338));
     }
-    _line(canvas, size, attention, const Color(0xFF67A7FF));
-    _line(canvas, size, meditation, const Color(0xFF67D5B5));
   }
 
-  void _line(Canvas canvas, Size size, List<double> values, Color color) {
-    if (values.isEmpty) return;
-    final path = Path();
-    for (var index = 0; index < values.length; index++) {
-      final x = size.width * index / math.max(1, values.length - 1);
-      final y = size.height * (1 - values[index].clamp(0, 100) / 100);
-      index == 0 ? path.moveTo(x, y) : path.lineTo(x, y);
-    }
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = color
-        ..strokeWidth = 2.5
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _ChartPainter old) =>
-      old.attention.length != attention.length ||
-      old.meditation.length != meditation.length ||
-      (attention.isNotEmpty && old.attention.last != attention.last);
-}
-
-class _Dropdown extends StatelessWidget {
-  const _Dropdown(
-    this.label,
-    this.value,
-    this.values, {
-    required this.enabled,
-    required this.onChanged,
-  });
-  final String label;
-  final String value;
-  final List<String> values;
-  final bool enabled;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return DropdownButtonFormField<String>(
-      initialValue: value,
-      decoration:
-          InputDecoration(labelText: label, border: const OutlineInputBorder()),
-      isExpanded: true,
-      items: [
-        for (final item in values)
-          DropdownMenuItem(value: item, child: Text(item))
-      ],
-      onChanged: enabled
-          ? (value) {
-              if (value != null) onChanged(value);
-            }
-          : null,
-    );
-  }
-}
-
-class _Value extends StatelessWidget {
-  const _Value(this.label, this.value);
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0C1725),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF26364B)),
+  void _label(Canvas canvas, Offset position, String value) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: value,
+        style: const TextStyle(color: Color(0xFFAAB8CA), fontSize: 12),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label,
-            style: const TextStyle(color: Color(0xFF91A2B7), fontSize: 12)),
-        const SizedBox(height: 4),
-        Text(value,
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(fontWeight: FontWeight.w900)),
-        const Text('algoritmo proprietário',
-            style: TextStyle(color: Color(0xFF7F91A7), fontSize: 10)),
-      ]),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    painter.paint(
+      canvas,
+      position - Offset(painter.width / 2, painter.height / 2),
     );
   }
-}
 
-class _SeparationNotice extends StatelessWidget {
-  const _SeparationNotice();
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: const Color(0xFF152332),
-        borderRadius: BorderRadius.circular(13),
-        border: Border.all(color: const Color(0xFF334A60)),
-      ),
-      child: const Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(Icons.call_split_rounded, color: Color(0xFF86B9E4)),
-        SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            'Duas camadas independentes: a ASRS é uma escala validada de rastreio; o EEG é um registro descritivo do próprio usuário. Uma camada não confirma nem refuta a outra.',
-            style: TextStyle(color: Color(0xFFC2D3E1), height: 1.4),
-          ),
-        ),
-      ]),
-    );
-  }
-}
-
-class _Page extends StatelessWidget {
-  const _Page({required this.child});
-  final Widget child;
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 880),
-            child: child,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Title extends StatelessWidget {
-  const _Title(this.title, this.subtitle);
-  final String title;
-  final String subtitle;
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(title,
-          style: theme.textTheme.headlineSmall
-              ?.copyWith(fontWeight: FontWeight.w800, color: Colors.white)),
-      const SizedBox(height: 4),
-      Text(subtitle,
-          style: theme.textTheme.bodySmall
-              ?.copyWith(color: const Color(0xFF98A8BB), height: 1.4)),
-    ]);
-  }
-}
-
-class _Empty extends StatelessWidget {
-  const _Empty(this.icon, this.title, this.message);
-  final IconData icon;
-  final String title;
-  final String message;
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, color: const Color(0xFF62748B), size: 32),
-          const SizedBox(height: 8),
-          Text(title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 4),
-          Text(message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Color(0xFF8FA0B4), fontSize: 12)),
-        ]),
-      ),
-    );
-  }
-}
-
-class _Info extends StatelessWidget {
-  const _Info(this.message);
-  final String message;
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: const Color(0xFF102132),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF28445D)),
-      ),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Icon(Icons.info_outline_rounded,
-            color: Color(0xFF7FB9E8), size: 20),
-        const SizedBox(width: 9),
-        Expanded(
-          child: Text(message,
-              style: const TextStyle(color: Color(0xFFBDD1E0), height: 1.4)),
-        ),
-      ]),
-    );
-  }
-}
-
-class _Pill extends StatelessWidget {
-  const _Pill(this.label, {this.color = const Color(0xFF82B8FF)});
-  final String label;
-  final Color color;
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.45)),
-      ),
-      child: Text(label,
-          style: TextStyle(
-              color: color,
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.5)),
-    );
-  }
+  bool shouldRepaint(_GaugePainter oldDelegate) => oldDelegate.score != score;
 }
 
 class _Eyebrow extends StatelessWidget {
   const _Eyebrow(this.text);
+
   final String text;
+
   @override
   Widget build(BuildContext context) {
-    return Text(text,
-        style: const TextStyle(
-            color: Color(0xFF88BAF2),
-            fontSize: 11,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.8));
+    return Text(
+      text,
+      style: const TextStyle(
+        color: Color(0xFF8BBEFF),
+        fontSize: 11,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 1.2,
+      ),
+    );
   }
-}
-
-class _Legend extends StatelessWidget {
-  const _Legend(this.color, this.label);
-  final Color color;
-  final String label;
-  @override
-  Widget build(BuildContext context) {
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      Container(
-          width: 9,
-          height: 9,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-      const SizedBox(width: 6),
-      Text(label, style: Theme.of(context).textTheme.bodySmall),
-    ]);
-  }
-}
-
-class _SessionEntry {
-  const _SessionEntry({
-    required this.date,
-    required this.source,
-    required this.sleepHours,
-    required this.mood,
-    required this.medication,
-    required this.task,
-    required this.manufacturerMean,
-  });
-  final DateTime date;
-  final String source;
-  final double sleepHours;
-  final String mood;
-  final String medication;
-  final String task;
-  final double? manufacturerMean;
-}
-
-String _dateTime(DateTime value) {
-  String two(int number) => number.toString().padLeft(2, '0');
-  return '${two(value.day)}/${two(value.month)}/${value.year} '
-      '${two(value.hour)}:${two(value.minute)}';
-}
-
-String _time(DateTime value) {
-  String two(int number) => number.toString().padLeft(2, '0');
-  return '${two(value.hour)}:${two(value.minute)}:${two(value.second)}';
 }

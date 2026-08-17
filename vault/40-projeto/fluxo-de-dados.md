@@ -7,48 +7,33 @@ atualizado: 2026-08-17
 
 # Fluxo de dados atual
 
-O contrato formal está em `FRONTEND_INTEGRATION.md`. O aplicativo mantém o EEG,
-o diário e o rastreio como camadas independentes no relatório.
-
 ```mermaid
 flowchart TD
-    A["BrainLink Lite<br/>Fp1"] --> B["TGAM + SDK<br/>filtro 60 Hz"]
-    B -->|"EEG bruto 128 Hz"| C["EventChannel<br/>lotes de 128"]
-    B -->|"eSense, sinal e bandas ~1 Hz"| D["MethodChannel<br/>snapshot válido"]
-    C --> E["RawBatch"]
-    D --> F["EEGData"]
-    F --> G["Sessão e gráfico"]
-    G --> H["Armazenamento local<br/>JSON, JSONL e raw opcional"]
-    I["Diário de contexto"] --> H
-    J["ASRS v1.1 6Q"] --> K["Arquivo separado de questionário"]
-    H --> L["Relatório HTML/TXT"]
-    K --> L
-    M["Demonstração"] -.-> G
+    A["Demonstração"] --> E["Coleta guiada<br/>abertos → fechados"]
+    B["BrainLink Lite"] --> C["SDK Android<br/>filtro 60 Hz"]
+    C -->|"eSense + poorSignal ~1 Hz"| D["MethodChannel"]
+    C -->|"raw 128 Hz em lotes"| R["EventChannel"]
+    D --> E
+    E --> F["Pontua contato + continuidade"]
+    F --> G["Velocímetro<br/>boa / aceitável / ruim"]
+    E --> H["Atenção e relaxamento<br/>saídas do fabricante"]
+    G --> I["HTML/TXT sob solicitação"]
+    H --> I
 ```
 
-## Regras do caminho
+## Regras
 
-- `CODE_RAW` não é mais descartado: o Android agrupa 128 amostras e informa
-  sequência, instante, qualidade do contato e descartes.
-- `CODE_EEGPOWER` inválido não reutiliza um snapshot anterior.
-- campos ainda não medidos são omitidos, nunca preenchidos com zero.
-- uma época rejeitada registra a razão, mas não exibe um número derivado.
-- o gráfico usa demonstração sintética ou dados recebidos pela ponte nativa.
-- o ASRS não recebe nem combina valores do headset.
-- os arquivos permanecem locais e só saem do app por exportação solicitada.
-
-## Taxas e limites
-
-| Trecho | Taxa | Uso atual |
-| --- | --- | --- |
-| TGAM → raw | 128 Hz | transporte e persistência opcional |
-| TGAM → eSense/bandas | aproximadamente 1 Hz | observação descritiva |
-| demonstração → UI | 1 s | validar o fluxo sem equipamento |
-
-O timestamp do lote é registrado no Android e inclui latência de Bluetooth e
-buffers. Ele não deve ser tratado como marcador preciso de evento.
+- O hardware usa 60 s com olhos abertos e 60 s com olhos fechados.
+- A demonstração usa 8 s em cada fase e sempre se identifica como simulada.
+- Som e vibração avisam a troca de fase e o final.
+- A pontuação de 0 a 100 combina contato (`poorSignal`) e continuidade de
+  leituras; não usa attention, meditation, bandas ou ASRS.
+- Sem `poorSignal`, o app mostra ausência de dados em vez de inventar zero.
+- eSense aparece de forma descritiva e separado da nota de coleta.
+- `CODE_RAW` é transportado em lotes, mas não alimenta o velocímetro atual.
+- Não há histórico, conta ou envio automático. A exportação é voluntária.
 
 ## Relacionadas
 
-[[auditoria-codigo]] · [[lacunas-tecnicas]] · [[chip-tgam-protocolo]] ·
-[[ADR-002-consumir-eeg-bruto]] · [[ADR-003-persistencia-de-sessoes]]
+[[auditoria-codigo]] · [[brainlink-lite]] · [[indices-esense]] ·
+[[artefatos-canal-unico]] · [[ADR-002-consumir-eeg-bruto]]

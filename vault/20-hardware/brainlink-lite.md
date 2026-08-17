@@ -37,8 +37,9 @@ o espectro de interesse (delta a gama baixa) e para o ajuste aperiódico na faix
 **Potências de banda** (`EEGPower`, ~1 Hz): `delta`, `theta`, `lowAlpha`,
 `highAlpha`, `lowBeta`, `highBeta`, `lowGamma`, `middleGamma`.
 
-**EEG bruto** (`CODE_RAW = 128`): amostras individuais. **Não consumido pelo
-código atual** — ver [[ADR-002-consumir-eeg-bruto]].
+**EEG bruto** (`CODE_RAW = 128`): amostras individuais. O código atual agrupa
+128 amostras por evento, com sequência, perdas e qualidade de contato; o raw
+ainda não alimenta a interface — ver [[ADR-002-consumir-eeg-bruto]].
 
 ## A armadilha das unidades de banda
 
@@ -54,8 +55,8 @@ banda, escala proprietária, **sem unidade física**. Consequências:
 - É impossível separar componente aperiódico de oscilatório a partir de oito
   números já agregados.
 
-O `MockDataService` atual usa valores base entre 30.000 e 120.000, que são
-arbitrários e não correspondem a nenhuma escala real.
+A demonstração atual produz apenas eSense e qualidade sintéticos, sempre
+identificados como simulados; ela não simula potências de banda para inferência.
 
 **Com o EEG bruto**, esse teto desaparece: FFT própria produz densidade espectral
 em µV²/Hz, com resolução e bordas de banda escolhidas por você.

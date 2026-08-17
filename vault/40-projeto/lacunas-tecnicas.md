@@ -10,13 +10,13 @@ atualizado: 2026-08-17
 O que falta construir, organizado por **o que cada lacuna destrava** — não por
 ordem de dificuldade.
 
-## Estado do produto A1 em 17/08/2026
+## Estado do produto de demonstração em 17/08/2026
 
-O recorte apresentado ao usuário está implementado: UI ligada ao hardware,
-descoberta Bluetooth Clássico, persistência local, ASRS v1.1 6Q, gráfico,
-histórico e exportação. O `CODE_RAW` também é transportado em lotes e o filtro
-de 60 Hz foi configurado. As lacunas abaixo continuam sendo o roteiro das
-abordagens experimentais A2–A4, não requisitos escondidos da interface A1.
+O recorte de interface foi simplificado para uma coleta guiada em uma tela:
+conexão, instruções, duas fases, velocímetro de qualidade e exportação. Diário,
+histórico e questionário não fazem parte do produto atual. O `CODE_RAW` é
+transportado em lotes e o filtro de 60 Hz está configurado. As lacunas abaixo
+continuam como roteiro de pesquisa, não como capacidades já exibidas.
 
 ## Matriz de dependência
 

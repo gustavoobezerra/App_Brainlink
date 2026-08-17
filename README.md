@@ -1,69 +1,75 @@
 # Projeto BrainLink
 
-Aplicativo Android simples para adultos (18+) registrarem sessões de atenção,
-contexto e o rastreio ASRS v1.1 de seis perguntas. Funciona em modo de
-demonstração sem headset e também se conecta ao BrainLink Lite por Bluetooth
-Clássico.
+Aplicativo Android de uma única tela para realizar uma coleta guiada com o
+BrainLink Lite. A pessoa escolhe **Ver demonstração** ou **Conectar BrainLink**,
+lê as instruções, acompanha o teste e recebe um resultado simples em formato de
+velocímetro.
 
-> Este é um recurso acadêmico de observação e rastreio. Não diagnostica TDAH,
-> não compara a pessoa com uma população e não substitui avaliação profissional.
+> A nota de 0 a 100 representa somente a qualidade da coleta: contato do sensor
+> e continuidade dos dados. Ela não avalia saúde, TDAH ou capacidade da pessoa.
 
-## O que o aplicativo entrega
+## Fluxo do aplicativo
 
-- tela inicial com escolha entre demonstração e hardware;
-- descoberta, seleção e conexão ao BrainLink Lite;
-- sessão com gráfico, qualidade de contato e diário de contexto;
-- ASRS v1.1 6Q em português, com pontuação e orientação responsável;
-- histórico local de sessões;
-- prévia e exportação de relatório autocontido em HTML e TXT;
-- compartilhamento do relatório pelo seletor nativo do Android;
-- aquisição opcional do EEG bruto a 128 Hz em lotes.
+```text
+Demonstração ou BrainLink
+          ↓
+Instruções de uso
+          ↓
+Olhos abertos → olhos fechados
+          ↓
+Velocímetro + dados do aparelho
+          ↓
+Exportar ou repetir
+```
 
-Os índices de atenção e meditação são algoritmos proprietários do
-fabricante e aparecem somente de forma descritiva. Sinal ausente ou inadequado
-não produz um número aparentemente medido.
+- **Demonstração:** duas etapas de 8 segundos, com dados simulados claramente
+  identificados.
+- **Hardware:** 1 minuto com olhos abertos e 1 minuto com olhos fechados.
+- A mudança de etapa e o encerramento usam som e vibração.
+- O resultado mostra `Coleta boa`, `Coleta aceitável` ou `Coleta ruim`.
+- Os índices de atenção e relaxamento aparecem como saídas proprietárias do
+  fabricante, sem classificação da pessoa.
+- Em coleta ruim ou sem dados, esses índices ficam ocultos e o app orienta a
+  reposicionar o sensor.
+- O resultado pode ser exportado em HTML e TXT e compartilhado pelo Android.
 
-## Telas
+## Usar com o BrainLink
 
-| Tela | Finalidade |
-| --- | --- |
-| Início | selecionar demonstração ou conectar o headset |
-| Sessão | acompanhar o gráfico e registrar sono, humor, medicação e tarefa |
-| ASRS | responder o rastreio e visualizar a pontuação de 0 a 6 |
-| Relatório | consultar o histórico, visualizar e exportar os dados |
+1. Carregue e ligue o BrainLink.
+2. No Android, abra **Configurações → Bluetooth** e pareie o dispositivo. Em
+   aparelhos antigos, o código pode ser `0000`.
+3. Coloque o sensor metálico na testa, cerca de 1 a 2 cm acima da sobrancelha,
+   sem cabelo entre sensor e pele. Ajuste o clipe para contato direto com o
+   lóbulo da orelha.
+4. Abra o app, toque em **Conectar BrainLink**, permita o acesso ao Bluetooth e
+   escolha o dispositivo.
+5. Sente-se confortavelmente. Evite falar, tensionar a testa ou a mandíbula e
+   movimentar a cabeça.
+6. Inicie: fique 1 minuto com os olhos abertos olhando para um ponto fixo. Ao
+   aviso sonoro/tátil, feche os olhos por mais 1 minuto, sem apertá-los.
 
-O ASRS permanece visualmente separado das observações do headset. Uma
-pontuação que merece atenção orienta a pessoa a conversar com um profissional
-de saúde, sem apresentar conclusão diagnóstica.
-
-## Dados e privacidade
-
-Os dados ficam no diretório privado do aplicativo, sem conta, nuvem ou envio
-automático. Cada sessão grava metadados, épocas e eventos em JSON/JSONL; o raw
-opcional usa `Int16` little-endian. A exportação e o compartilhamento ocorrem
-somente por ação da pessoa.
+Se o velocímetro indicar coleta ruim, limpe e seque os pontos de contato,
+reposicione o sensor e o clipe e repita. Piscadas frequentes, fala, movimento,
+cabelo, suor ou cosméticos entre metal e pele podem degradar o sinal.
 
 ## Arquitetura
 
 ```text
 lib/
-├── data/models/       # EEG, raw, ASRS, sessão e diário
+├── data/models/       # EEG consolidado, raw e dispositivo Bluetooth
 ├── native/            # contrato Flutter ↔ Android
-├── services/          # demonstração, persistência e exportação
-└── ui/screens/        # interface principal com quatro telas
+├── services/          # demonstração e exportação do resultado
+└── ui/screens/        # fluxo visual único
 
 android/app/src/main/java/com/brainlink/app/
-└── MainActivity.java  # SDK, Bluetooth Clássico, raw e compartilhamento
+└── MainActivity.java  # SDK, Bluetooth Clássico e compartilhamento
 ```
 
-O contrato nativo completo está em
-[`FRONTEND_INTEGRATION.md`](FRONTEND_INTEGRATION.md). As decisões científicas,
-de produto, linguagem e persistência estão em [`vault/README.md`](vault/README.md).
+O contrato nativo está em
+[`FRONTEND_INTEGRATION.md`](FRONTEND_INTEGRATION.md). A fundamentação e os
+limites científicos estão em [`vault/README.md`](vault/README.md).
 
 ## Executar e validar
-
-Requisitos: Flutter com Dart 3.5 ou superior, Android SDK e Java compatível com
-o toolchain do Flutter.
 
 ```bash
 flutter pub get
@@ -73,20 +79,16 @@ flutter test
 flutter build apk --release
 ```
 
-O APK é gerado em `build/app/outputs/flutter-apk/app-release.apk`. O modo
-**Demonstração** permite percorrer o fluxo completo sem hardware. Para o modo
-**Hardware**, pareie o BrainLink nas configurações do Android, conceda as
-permissões Bluetooth solicitadas e escolha o dispositivo na tela inicial.
+O APK é gerado em `build/app/outputs/flutter-apk/app-release.apk`.
+
+## Privacidade e limites
+
+- não há conta, nuvem ou envio automático;
+- arquivos são criados somente quando a pessoa toca em exportar;
+- o headset possui um canal frontal sensível a contato, piscadas e movimento;
+- os índices do fabricante não possuem interpretação clínica;
+- a integração final deve ser exercitada com o BrainLink Lite físico e o
+  Android que serão usados na apresentação.
 
 O SDK proprietário `libStreamSDK_v1.3.2.jar` deve ser usado e distribuído de
 acordo com os termos de seu fabricante.
-
-## Limites atuais
-
-- não há validação clínica nem referência populacional;
-- o headset tem um único canal frontal, sensível a movimento e piscadas;
-- análises espectrais experimentais A2–A4 permanecem fora da interface;
-- a integração física depende de teste com um BrainLink Lite real.
-
-O projeto inclui testes de modelos, persistência, exportação, linguagem e do
-fluxo principal da interface, além de uma rotina de CI para análise, testes e APK.

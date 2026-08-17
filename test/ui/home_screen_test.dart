@@ -1,65 +1,97 @@
-import 'package:brainlink_app/main.dart';
+import 'package:brainlink_app/ui/screens/home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('oferece os modos e identifica o público adulto', (tester) async {
-    await tester.pumpWidget(const BrainLinkApp());
+  testWidgets('mantém um único fluxo sem abas, diário ou questionário',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: HomeScreen()));
 
-    expect(find.text('Demonstração'), findsOneWidget);
-    expect(find.text('Hardware'), findsOneWidget);
-    expect(find.textContaining('adultos (18+)'), findsWidgets);
+    expect(find.text('Ver demonstração'), findsOneWidget);
+    expect(find.text('Conectar BrainLink'), findsOneWidget);
+    expect(find.byType(NavigationBar), findsNothing);
+    expect(find.text('Diário'), findsNothing);
+    expect(find.text('ASRS'), findsNothing);
   });
 
-  testWidgets('exemplo do screener mostra a orientação de atenção',
-      (tester) async {
-    await tester.pumpWidget(const BrainLinkApp());
-    await tester.tap(find.text('ASRS'));
+  testWidgets('mostra instruções antes de iniciar', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: HomeScreen()));
+    await tester.tap(find.text('Ver demonstração'));
     await tester.pumpAndSettle();
 
-    final exampleButton = find.text('Usar exemplo');
+    expect(find.text('Antes de começar'), findsOneWidget);
+    expect(find.text('Olhos abertos por 8 segundos'), findsOneWidget);
+    expect(find.text('Olhos fechados por 8 segundos'), findsOneWidget);
+    expect(find.text('Começar demonstração'), findsOneWidget);
+  });
+
+  testWidgets('conecta dispositivo e mostra o protocolo real de dois minutos',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(home: HomeScreen(deviceGateway: _FakeGateway())),
+    );
+
+    await tester.tap(find.text('Conectar BrainLink'));
+    await tester.pumpAndSettle();
+    expect(find.text('BrainLink de teste'), findsOneWidget);
+
+    final connectButton = find.text('Conectar');
     await tester.scrollUntilVisible(
-      exampleButton,
-      500,
+      connectButton,
+      400,
       scrollable: find.byType(Scrollable).first,
     );
-    await tester.tap(exampleButton);
+    await tester.tap(connectButton);
     await tester.pumpAndSettle();
-
-    expect(find.text('5/6 respostas de rastreio'), findsOneWidget);
-    expect(
-      find.text(
-        'Sua pontuação merece atenção. Converse com um profissional de saúde.',
-      ),
-      findsOneWidget,
-    );
+    expect(find.text('Olhos abertos por 1 minuto'), findsOneWidget);
+    expect(find.text('Olhos fechados por 1 minuto'), findsOneWidget);
+    expect(find.text('Começar teste de 2 minutos'), findsOneWidget);
   });
 
-  testWidgets('sessão simulada alimenta gráfico e prévia do relatório',
+  testWidgets('guia as fases e apresenta velocímetro com resultado',
       (tester) async {
-    await tester.pumpWidget(const BrainLinkApp());
-    await tester.tap(find.text('Sessão'));
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: HomeScreen(
+          demonstrationPhaseDuration: Duration(seconds: 1),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Ver demonstração'));
     await tester.pumpAndSettle();
-
-    final startButton = find.text('Iniciar sessão');
+    final startButton = find.text('Começar demonstração');
     await tester.scrollUntilVisible(
       startButton,
       500,
       scrollable: find.byType(Scrollable).first,
     );
     await tester.tap(startButton);
-    await tester.pump(const Duration(seconds: 3));
-    expect(find.text('Finalizar e registrar'), findsOneWidget);
-    expect(find.text('Sem dados nesta sessão'), findsNothing);
+    await tester.pump();
 
-    await tester.tap(find.text('Finalizar e registrar'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Relatório'));
+    expect(find.text('Mantenha os olhos abertos'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Agora feche os olhos'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('1 sessão'), findsOneWidget);
-    expect(find.text('Exportar relatório HTML'), findsOneWidget);
-    expect(find.textContaining('RELATÓRIO DE OBSERVAÇÃO BRAINLINK'),
-        findsOneWidget);
+    expect(find.text('Resultado da coleta'), findsOneWidget);
+    expect(find.text('Coleta boa'), findsOneWidget);
+    expect(find.text('de 100'), findsOneWidget);
+    expect(find.text('Exportar resultado'), findsOneWidget);
+    expect(
+      find.textContaining('nota do velocímetro é da coleta'),
+      findsOneWidget,
+    );
   });
+}
+
+class _FakeGateway implements DeviceDiscoveryGateway {
+  @override
+  Future<List<ConnectableDevice>> listDevices() async => const [
+        ConnectableDevice('00:11:22:33:44:55', 'BrainLink de teste',
+            isPaired: true),
+      ];
+
+  @override
+  Future<void> connect(ConnectableDevice device) async {}
 }

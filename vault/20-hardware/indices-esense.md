@@ -12,8 +12,9 @@ atualizado: 2026-08-13
 Dois valores de 0 a 100 calculados pelo chip NeuroSky e entregues a ~1 Hz:
 `attention` e `meditation`.
 
-São **os dois cards principais da tela inicial do app hoje**, sob o rótulo de
-indicadores cognitivos.
+São mostrados como dois dados secundários ao final da coleta, explicitamente
+rotulados como saídas proprietárias do aparelho. O velocímetro principal usa
+somente contato e continuidade do sinal.
 
 ## O problema
 
@@ -60,11 +61,11 @@ O que ele **não** pode fazer:
 - ser comparado entre pessoas;
 - entrar em qualquer índice composto que pareça clínico.
 
-## Um ajuste de rótulo recomendado
+## Rótulo adotado
 
-A tela atual apresenta os dois valores sob "indicadores cognitivos", o que
-sugere validade que eles não têm. Um rótulo mais honesto seria "índices do
-fabricante (algoritmo proprietário)". Ver [[linguagem-permitida]].
+A interface usa "Atenção do aparelho" e "Relaxamento do aparelho" e informa ao
+lado que são cálculos proprietários sem leitura clínica. Ver
+[[linguagem-permitida]].
 
 ## Relacionadas
 
