@@ -39,7 +39,7 @@ class BrainLinkApp extends StatelessWidget {
     );
 
     return MaterialApp(
-      title: 'BrainLink EEG Monitor',
+      title: 'Projeto BrainLink',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.dark,
       darkTheme: ThemeData(

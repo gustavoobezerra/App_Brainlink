@@ -74,7 +74,8 @@ void main() {
     });
 
     test('diferença em qualquer campo quebra a igualdade', () {
-      final base = EEGData.fromMap({'attention': 1, 'theta': 2, 'timestamp': 5});
+      final base =
+          EEGData.fromMap({'attention': 1, 'theta': 2, 'timestamp': 5});
       expect(base, isNot(equals(base.copyWith(theta: 3))));
       expect(base, isNot(equals(base.copyWith(clearAttention: true))));
     });
@@ -87,16 +88,16 @@ void main() {
     });
 
     test('totalAlpha soma quando as duas metades existem', () {
-      final d = EEGData.fromMap(
-          {'lowAlpha': 10, 'highAlpha': 15, 'timestamp': 0});
+      final d =
+          EEGData.fromMap({'lowAlpha': 10, 'highAlpha': 15, 'timestamp': 0});
       expect(d.totalAlpha, 25);
     });
   });
 
   group('copyWith', () {
     test('preserva o resto e substitui o que foi passado', () {
-      final a = EEGData.fromMap(
-          {'attention': 1, 'meditation': 2, 'timestamp': 5});
+      final a =
+          EEGData.fromMap({'attention': 1, 'meditation': 2, 'timestamp': 5});
       expect(a.copyWith(attention: 9).meditation, 2);
       expect(a.copyWith(attention: 9).attention, 9);
     });
