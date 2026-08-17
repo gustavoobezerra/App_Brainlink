@@ -1,129 +1,92 @@
-# BrainLink EEG Monitor
+# Projeto BrainLink
 
-Aplicativo móvel experimental para aquisição e visualização de indicadores
-eletroencefalográficos obtidos com o headset BrainLink Lite. O projeto combina
-uma interface Flutter com uma ponte Android em Java para o SDK nativo do
-dispositivo.
+Aplicativo Android simples para adultos (18+) registrarem sessões de atenção,
+contexto e o rastreio ASRS v1.1 de seis perguntas. Funciona em modo de
+demonstração sem headset e também se conecta ao BrainLink Lite por Bluetooth
+Clássico.
 
-> **Nota científica:** este software é um protótipo acadêmico. Os dados exibidos
-> não devem ser utilizados para diagnóstico, tratamento ou tomada de decisão
-> clínica.
+> Este é um recurso acadêmico de observação e rastreio. Não diagnostica TDAH,
+> não compara a pessoa com uma população e não substitui avaliação profissional.
 
-## Objetivos
+## O que o aplicativo entrega
 
-- representar amostras de EEG em uma estrutura de dados tipada;
-- acompanhar indicadores de atenção, meditação e qualidade do sinal;
-- comparar a potência relativa das bandas delta, theta, alfa, beta e gama;
-- fornecer um ambiente simulado para desenvolvimento sem o equipamento físico;
-- integrar o Flutter ao SDK Android por meio de um `MethodChannel`.
+- tela inicial com escolha entre demonstração e hardware;
+- descoberta, seleção e conexão ao BrainLink Lite;
+- sessão com gráfico, qualidade de contato e diário de contexto;
+- ASRS v1.1 6Q em português, com pontuação e orientação responsável;
+- histórico local de sessões;
+- prévia e exportação de relatório autocontido em HTML e TXT;
+- compartilhamento do relatório pelo seletor nativo do Android;
+- aquisição opcional do EEG bruto a 128 Hz em lotes.
 
-## Estado atual
+Os índices de atenção e meditação são algoritmos proprietários do
+fabricante e aparecem somente de forma descritiva. Sinal ausente ou inadequado
+não produz um número aparentemente medido.
 
-A tela principal utiliza dados simulados para demonstrar o fluxo de atualização
-e a apresentação das métricas. A ponte nativa recebe comandos de conexão e
-converte os callbacks do SDK em eventos Dart, mas a descoberta e a seleção do
-dispositivo físico ainda não estão expostas na interface.
+## Telas
 
-| Componente | Situação |
+| Tela | Finalidade |
 | --- | --- |
-| Painel de demonstração | Implementado com dados simulados |
-| Modelo de amostra EEG | Implementado |
-| Comunicação Flutter–Android | Implementada por `MethodChannel` |
-| Processamento pelo SDK BrainLink | Integrado na camada Android |
-| Descoberta e seleção do headset | Pendente na interface |
-| Validação clínica | Fora do escopo |
+| Início | selecionar demonstração ou conectar o headset |
+| Sessão | acompanhar o gráfico e registrar sono, humor, medicação e tarefa |
+| ASRS | responder o rastreio e visualizar a pontuação de 0 a 6 |
+| Relatório | consultar o histórico, visualizar e exportar os dados |
+
+O ASRS permanece visualmente separado das observações do headset. Uma
+pontuação que merece atenção orienta a pessoa a conversar com um profissional
+de saúde, sem apresentar conclusão diagnóstica.
+
+## Dados e privacidade
+
+Os dados ficam no diretório privado do aplicativo, sem conta, nuvem ou envio
+automático. Cada sessão grava metadados, épocas e eventos em JSON/JSONL; o raw
+opcional usa `Int16` little-endian. A exportação e o compartilhamento ocorrem
+somente por ação da pessoa.
 
 ## Arquitetura
 
 ```text
 lib/
-├── core/
-│   └── logger.dart                 # registro técnico em desenvolvimento
-├── data/models/
-│   └── eeg_data.dart               # modelo imutável das amostras
-├── native/
-│   └── brainlink_bridge.dart        # contrato Flutter–Android
-├── services/
-│   └── mock_data_service.dart       # geração de dados experimentais
-├── ui/screens/
-│   └── home_screen.dart             # painel de visualização
-└── main.dart                        # inicialização e tema
+├── data/models/       # EEG, raw, ASRS, sessão e diário
+├── native/            # contrato Flutter ↔ Android
+├── services/          # demonstração, persistência e exportação
+└── ui/screens/        # interface principal com quatro telas
 
 android/app/src/main/java/com/brainlink/app/
-└── MainActivity.java                # adaptação do SDK nativo
+└── MainActivity.java  # SDK, Bluetooth Clássico, raw e compartilhamento
 ```
 
-O fluxo previsto para o dispositivo físico é:
+O contrato nativo completo está em
+[`FRONTEND_INTEGRATION.md`](FRONTEND_INTEGRATION.md). As decisões científicas,
+de produto, linguagem e persistência estão em [`vault/README.md`](vault/README.md).
 
-```text
-BrainLink Lite → SDK Android → MethodChannel → EEGData → interface Flutter
-```
+## Executar e validar
 
-## Indicadores representados
-
-| Indicador | Representação no aplicativo |
-| --- | --- |
-| Atenção | Índice eSense de 0 a 100 |
-| Meditação | Índice eSense de 0 a 100 |
-| Qualidade do sinal | Escala de 0 a 200; valores menores indicam melhor contato |
-| Bandas de frequência | Potências relativas fornecidas pelo SDK |
-
-As associações entre bandas de frequência e estados cognitivos são
-contextuais. Sua interpretação exige protocolo experimental, controle de
-artefatos e fundamentação bibliográfica adequada.
-
-## Requisitos
-
-- Flutter compatível com Dart `>=3.5.0 <4.0.0`;
-- Android SDK configurado para desenvolvimento Flutter;
-- dispositivo ou emulador Android para execução;
-- headset BrainLink Lite para testes da integração nativa;
-- SDK BrainLink `libStreamSDK_v1.3.2.jar`, já referenciado pelo módulo Android.
-
-O uso e a distribuição do SDK proprietário devem respeitar os termos do
-fabricante.
-
-## Execução
-
-Na raiz do projeto, instale as dependências:
+Requisitos: Flutter com Dart 3.5 ou superior, Android SDK e Java compatível com
+o toolchain do Flutter.
 
 ```bash
 flutter pub get
+dart format --output=none --set-exit-if-changed lib test
+dart analyze lib test
+flutter test
+flutter build apk --release
 ```
 
-Verifique a qualidade estática do código:
+O APK é gerado em `build/app/outputs/flutter-apk/app-release.apk`. O modo
+**Demonstração** permite percorrer o fluxo completo sem hardware. Para o modo
+**Hardware**, pareie o BrainLink nas configurações do Android, conceda as
+permissões Bluetooth solicitadas e escolha o dispositivo na tela inicial.
 
-```bash
-flutter analyze
-```
+O SDK proprietário `libStreamSDK_v1.3.2.jar` deve ser usado e distribuído de
+acordo com os termos de seu fabricante.
 
-Execute o aplicativo em um dispositivo disponível:
+## Limites atuais
 
-```bash
-flutter run
-```
+- não há validação clínica nem referência populacional;
+- o headset tem um único canal frontal, sensível a movimento e piscadas;
+- análises espectrais experimentais A2–A4 permanecem fora da interface;
+- a integração física depende de teste com um BrainLink Lite real.
 
-Na tela inicial, selecione **Iniciar demonstração** para produzir uma série
-simulada. Os valores mudam periodicamente para apoiar testes de interface.
-
-## Integração nativa
-
-O canal `com.brainlink.app/sdk` define o contrato entre Dart e Java. Comandos,
-callbacks e campos transmitidos estão documentados em
-[`FRONTEND_INTEGRATION.md`](FRONTEND_INTEGRATION.md).
-
-Ao alterar o protocolo, mantenha os nomes e tipos sincronizados entre:
-
-- `lib/data/models/eeg_data.dart`;
-- `lib/native/brainlink_bridge.dart`;
-- `android/app/src/main/java/com/brainlink/app/MainActivity.java`.
-
-## Limitações e próximos passos
-
-- implementar descoberta BLE e seleção do headset na interface;
-- solicitar permissões Bluetooth em tempo de execução;
-- validar a aquisição em diferentes versões do Android;
-- adicionar testes unitários, de widget e de integração;
-- definir persistência, anonimização e exportação de sessões;
-- estabelecer um protocolo de tratamento de ruído e artefatos;
-- documentar consentimento, privacidade e governança dos dados de pesquisa.
+O projeto inclui testes de modelos, persistência, exportação, linguagem e do
+fluxo principal da interface, além de uma rotina de CI para análise, testes e APK.
