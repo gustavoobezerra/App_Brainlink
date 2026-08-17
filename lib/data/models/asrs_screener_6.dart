@@ -28,6 +28,10 @@ class AsrsScreenerResult {
 
   bool get reachedScreeningCutoff => total >= AsrsScreener6.cutoff;
 
+  String get possibilityLabel => reachedScreeningCutoff
+      ? 'Possibilidade aumentada no ASRS'
+      : 'Ponto de corte não atingido';
+
   String get label => switch (band) {
         AsrsScoreBand.lowNegative => 'Faixa inferior de rastreio',
         AsrsScoreBand.highNegative => 'Próximo ao ponto de corte',
@@ -36,11 +40,12 @@ class AsrsScreenerResult {
       };
 
   String get guidance => reachedScreeningCutoff
-      ? 'Suas respostas ficaram na faixa que merece avaliação profissional. '
-          'Este rastreio não confirma TDAH.'
-      : 'Suas respostas não atingiram o ponto de corte. Se houver dificuldade '
-          'no dia a dia, converse com um profissional; este resultado não '
-          'exclui TDAH.';
+      ? 'As respostas atingiram o ponto de corte e apontam possibilidade '
+          'aumentada de TDAH neste rastreio. Este resultado não é diagnóstico. '
+          'Procure avaliação de um médico ou psicólogo.'
+      : 'As respostas ficaram abaixo do ponto de corte. Isso não exclui TDAH '
+          'e não é diagnóstico. Se houver dificuldade no dia a dia, converse '
+          'com um médico ou psicólogo.';
 }
 
 /// ASRS v1.1 Screener (6Q), versão oficial em português do Brasil.

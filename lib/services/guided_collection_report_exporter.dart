@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'eeg_spectrum_analyzer.dart';
+
 /// Resultado simples de uma coleta guiada do BrainLink.
 class GuidedCollectionReportData {
   const GuidedCollectionReportData({
@@ -11,8 +13,10 @@ class GuidedCollectionReportData {
     required this.readingCount,
     this.attentionMean,
     this.meditationMean,
+    this.spectrum,
     this.asrsScore,
     this.asrsLabel,
+    this.asrsBandLabel,
     this.asrsGuidance,
   });
 
@@ -24,8 +28,10 @@ class GuidedCollectionReportData {
   final int readingCount;
   final double? attentionMean;
   final double? meditationMean;
+  final EegSpectrumAnalysis? spectrum;
   final int? asrsScore;
   final String? asrsLabel;
+  final String? asrsBandLabel;
   final String? asrsGuidance;
 }
 
@@ -55,6 +61,7 @@ class GuidedCollectionReportExporter {
     .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.item{padding:16px;border:1px solid #dbe3ec;border-radius:12px}
     .item span{display:block;color:#627086;font-size:13px}.notice{margin-top:26px;padding:15px;border-left:4px solid #315f8c;background:#f0f5fa}
     .asrs{margin-top:26px;padding:22px;border:1px solid #dbe3ec;border-radius:16px}.asrs h2{margin:0 0 6px}.asrs-score{font-size:38px;font-weight:800;color:#315f8c}
+    .eeg{margin-top:26px;padding:22px;border:1px solid #dbe3ec;border-radius:16px}.bands{width:100%;border-collapse:collapse;margin-top:12px}.bands th,.bands td{padding:8px;border-bottom:1px solid #e1e7ee;text-align:left}.badge{display:inline-block;padding:5px 9px;border-radius:12px;background:#e8edf3;font-size:12px;font-weight:800}
     @media(max-width:560px){main{padding:24px}.grid{grid-template-columns:1fr}}
   </style>
 </head><body><main>
@@ -68,6 +75,7 @@ class GuidedCollectionReportExporter {
     ${_item('Relaxamento do aparelho', _number(data.meditationMean))}
   </div>
   <p class="notice">A nota avalia contato e continuidade do sinal durante a coleta. Os demais valores são índices proprietários do fabricante. Eles não avaliam saúde, TDAH ou capacidade da pessoa.</p>
+  ${_spectrumHtml(data)}
   ${_asrsHtml(data)}
 </main></body></html>''';
   }
@@ -84,6 +92,7 @@ Atenção do aparelho: ${_number(data.attentionMean)}
 Relaxamento do aparelho: ${_number(data.meditationMean)}
 
 A nota avalia contato e continuidade do sinal durante a coleta. Os demais valores são índices proprietários do fabricante. Eles não avaliam saúde, TDAH ou capacidade da pessoa.
+${_spectrumText(data)}
 ${_asrsText(data)}
 ''';
 
@@ -110,14 +119,22 @@ ${_asrsText(data)}
   static String _asrsHtml(GuidedCollectionReportData data) {
     final score = data.asrsScore;
     final label = data.asrsLabel;
+    final bandLabel = data.asrsBandLabel;
     final guidance = data.asrsGuidance;
-    if (score == null || label == null || guidance == null) return '';
+    if (score == null ||
+        label == null ||
+        bandLabel == null ||
+        guidance == null) {
+      return '';
+    }
     return '''
   <section class="asrs">
-    <h2>Rastreio ASRS v1.1 — adultos (18+)</h2>
+    <h2>Possibilidade de TDAH no rastreio ASRS v1.1</h2>
+    <div class="badge">NÃO É DIAGNÓSTICO</div>
     <div class="muted">Resultado das respostas, separado dos dados do BrainLink</div>
     <div class="asrs-score">$score de 24</div>
     <strong>${_escape(label)}</strong>
+    <div class="muted">${_escape(bandLabel)}</div>
     <p>${_escape(guidance)}</p>
     <p class="muted">ASRS v1.1 6-Question Screener © New York University and Ronald C. Kessler, PhD. All rights reserved. Derived from the WHO CIDI.</p>
     <p class="muted">Pontuação 0–24: <a href="https://www.hcp.med.harvard.edu/ncs/ftpdir/adhd/ASRS_v1.1_screener%286Q%29_scoring_update.pdf">fonte oficial</a>.</p>
@@ -127,18 +144,97 @@ ${_asrsText(data)}
   static String _asrsText(GuidedCollectionReportData data) {
     final score = data.asrsScore;
     final label = data.asrsLabel;
+    final bandLabel = data.asrsBandLabel;
     final guidance = data.asrsGuidance;
-    if (score == null || label == null || guidance == null) return '';
+    if (score == null ||
+        label == null ||
+        bandLabel == null ||
+        guidance == null) {
+      return '';
+    }
     return '''
 
-RASTREIO ASRS V1.1 — ADULTOS (18+)
+POSSIBILIDADE DE TDAH NO RASTREIO ASRS V1.1 — ADULTOS (18+)
+NÃO É DIAGNÓSTICO
 Resultado das respostas, separado dos dados do BrainLink.
 Pontuação: $score/24 — $label
+Faixa: $bandLabel
 $guidance
 
 ASRS v1.1 6-Question Screener © New York University and Ronald C. Kessler, PhD. All rights reserved. Derived from the WHO CIDI.
 Pontuação oficial: https://www.hcp.med.harvard.edu/ncs/ftpdir/adhd/ASRS_v1.1_screener%286Q%29_scoring_update.pdf
 ''';
+  }
+
+  static String _spectrumHtml(GuidedCollectionReportData data) {
+    final spectrum = data.spectrum;
+    if (spectrum == null) return '';
+    if (!spectrum.isUsable) {
+      return '''
+  <section class="eeg">
+    <h2>Ondas observadas nesta coleta</h2>
+    <div class="badge">NÃO ENTRA NO RASTREIO DE TDAH</div>
+    <p><strong>Bandas não exibidas.</strong> ${_escape(spectrum.qualityExplanation)}</p>
+    <p class="muted">Pipeline ${EegSpectrumAnalysis.pipelineVersion}.</p>
+  </section>''';
+    }
+    final alpha = _alphaDescription(spectrum.alphaChangePercent);
+    return '''
+  <section class="eeg">
+    <h2>Ondas observadas nesta coleta</h2>
+    <div class="badge">NÃO ENTRA NO RASTREIO DE TDAH</div>
+    <table class="bands"><thead><tr><th>Banda</th><th>Olhos abertos</th><th>Olhos fechados</th></tr></thead><tbody>
+      ${_bandRow(EegBand.delta, spectrum)}
+      ${_bandRow(EegBand.theta, spectrum)}
+      ${_bandRow(EegBand.alpha, spectrum)}
+      ${_bandRow(EegBand.beta, spectrum)}
+    </tbody></table>
+    <p>${_escape(alpha)}</p>
+    <p class="muted">${(spectrum.acceptedFraction * 100).round()}% dos trechos aproveitados. Potência relativa entre 1 e 30 Hz. Pipeline ${EegSpectrumAnalysis.pipelineVersion}. As bandas descrevem a coleta e não indicam TDAH.</p>
+  </section>''';
+  }
+
+  static String _spectrumText(GuidedCollectionReportData data) {
+    final spectrum = data.spectrum;
+    if (spectrum == null) return '';
+    if (!spectrum.isUsable) {
+      return '''
+
+ONDAS OBSERVADAS NESTA COLETA
+NÃO ENTRA NO RASTREIO DE TDAH
+Bandas não exibidas: ${spectrum.qualityExplanation}
+Pipeline: ${EegSpectrumAnalysis.pipelineVersion}
+''';
+    }
+    String line(EegBand band) =>
+        '${band.label}: abertos ${spectrum.eyesOpen.bands.valueFor(band).toStringAsFixed(1)}% | fechados ${spectrum.eyesClosed.bands.valueFor(band).toStringAsFixed(1)}%';
+    return '''
+
+ONDAS OBSERVADAS NESTA COLETA
+NÃO ENTRA NO RASTREIO DE TDAH
+${line(EegBand.delta)}
+${line(EegBand.theta)}
+${line(EegBand.alpha)}
+${line(EegBand.beta)}
+${_alphaDescription(spectrum.alphaChangePercent)}
+Trechos aproveitados: ${(spectrum.acceptedFraction * 100).round()}%
+Pipeline: ${EegSpectrumAnalysis.pipelineVersion}
+As bandas descrevem a coleta e não indicam TDAH.
+''';
+  }
+
+  static String _bandRow(EegBand band, EegSpectrumAnalysis spectrum) =>
+      '<tr><td>${_escape(band.label)}</td><td>${spectrum.eyesOpen.bands.valueFor(band).toStringAsFixed(1)}%</td><td>${spectrum.eyesClosed.bands.valueFor(band).toStringAsFixed(1)}%</td></tr>';
+
+  static String _alphaDescription(double? change) {
+    if (change == null) return 'A variação de alfa não pôde ser calculada.';
+    if (change >= 20) {
+      return 'A potência alfa aumentou com os olhos fechados nesta coleta.';
+    }
+    if (change <= -20) {
+      return 'A potência alfa foi menor com os olhos fechados nesta coleta.';
+    }
+    return 'A potência alfa ficou semelhante nas duas etapas desta coleta.';
   }
 
   static String _number(double? value) =>

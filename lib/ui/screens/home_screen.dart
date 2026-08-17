@@ -1,13 +1,16 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../data/models/asrs_screener_6.dart';
 import '../../data/models/eeg_data.dart';
+import '../../data/models/raw_batch.dart';
 import '../../native/brainlink_bridge.dart';
+import '../../services/eeg_spectrum_analyzer.dart';
 import '../../services/guided_collection_report_exporter.dart';
 
 enum AcquisitionMode { demonstration, hardware }
@@ -99,12 +102,14 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
     this.deviceGateway,
+    this.rawDataStream,
     this.demonstrationPhaseDuration = const Duration(seconds: 8),
     this.hardwarePhaseDuration = const Duration(minutes: 1),
     this.tickInterval = const Duration(seconds: 1),
   });
 
   final DeviceDiscoveryGateway? deviceGateway;
+  final Stream<RawBatch>? rawDataStream;
   final Duration demonstrationPhaseDuration;
   final Duration hardwarePhaseDuration;
   final Duration tickInterval;
@@ -117,9 +122,11 @@ class _HomeScreenState extends State<HomeScreen> {
   final BrainLinkBridge _bridge = BrainLinkBridge();
   final GuidedCollectionReportExporter _exporter =
       const GuidedCollectionReportExporter();
+  final EegSpectrumAnalyzer _spectrumAnalyzer = const EegSpectrumAnalyzer();
 
   late final DeviceDiscoveryGateway _deviceGateway;
   StreamSubscription<EEGData>? _dataSubscription;
+  StreamSubscription<RawBatch>? _rawSubscription;
   StreamSubscription<bool>? _connectionSubscription;
   StreamSubscription<String>? _errorSubscription;
   Timer? _timer;
@@ -131,6 +138,12 @@ class _HomeScreenState extends State<HomeScreen> {
   DateTime? _startedAt;
   DateTime? _endedAt;
   final List<_Reading> _readings = [];
+  final List<RawBatch> _eyesOpenRaw = [];
+  final List<RawBatch> _eyesClosedRaw = [];
+  final List<double> _liveRawMicrovolts = [];
+  EegSpectrumAnalysis? _spectrumAnalysis;
+  int _demonstrationRawSequence = 0;
+  int _demonstrationSampleIndex = 0;
   final List<AsrsResponse?> _asrsAnswers =
       List<AsrsResponse?>.filled(AsrsScreener6.itemCount, null);
 
@@ -148,6 +161,18 @@ class _HomeScreenState extends State<HomeScreen> {
     _deviceGateway = widget.deviceGateway ?? NativeBrainLinkGateway(_bridge);
     _connected = _bridge.isConnected;
     _dataSubscription = _bridge.eegDataStream.listen(_onHardwareData);
+    _rawSubscription = (widget.rawDataStream ?? _bridge.rawDataStream).listen(
+      _onHardwareRaw,
+      onError: (Object _) {
+        if (!mounted ||
+            _mode != AcquisitionMode.hardware ||
+            _step != CollectionStep.running) {
+          return;
+        }
+        setState(() => _connectionMessage =
+            'O fluxo de EEG bruto foi interrompido. Reconecte e repita a coleta.');
+      },
+    );
     _connectionSubscription = _bridge.connectionStateStream.listen((connected) {
       if (!mounted) return;
       setState(() {
@@ -170,6 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _timer?.cancel();
     unawaited(_dataSubscription?.cancel());
+    unawaited(_rawSubscription?.cancel());
     unawaited(_connectionSubscription?.cancel());
     unawaited(_errorSubscription?.cancel());
     super.dispose();
@@ -332,9 +358,10 @@ class _HomeScreenState extends State<HomeScreen> {
       _startedAt = DateTime.now();
       _endedAt = null;
       _readings.clear();
+      _clearRawState();
       _exportMessage = null;
       if (_mode == AcquisitionMode.demonstration) {
-        _appendDemonstrationReading();
+        _appendDemonstrationFrame();
       }
     });
     _timer = Timer.periodic(widget.tickInterval, (_) => _tickCollection());
@@ -346,7 +373,7 @@ class _HomeScreenState extends State<HomeScreen> {
     var finished = false;
     setState(() {
       if (_mode == AcquisitionMode.demonstration) {
-        _appendDemonstrationReading();
+        _appendDemonstrationFrame();
       }
       _phaseElapsed += widget.tickInterval;
       if (_phaseElapsed >= _phaseDuration) {
@@ -384,6 +411,37 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _appendDemonstrationFrame() {
+    _appendDemonstrationReading();
+    final closed = _phase == CollectionPhase.eyesClosed;
+    final samples = Int32List(128);
+    for (var index = 0; index < samples.length; index++) {
+      final sampleIndex = _demonstrationSampleIndex + index;
+      final time = sampleIndex / 128;
+      final delta = 2.0 * math.sin(2 * math.pi * 2 * time);
+      final theta =
+          (closed ? 4.0 : 7.0) * math.sin(2 * math.pi * 6 * time + 0.3);
+      final alpha =
+          (closed ? 14.0 : 5.0) * math.sin(2 * math.pi * 10 * time + 0.7);
+      final beta =
+          (closed ? 2.5 : 4.0) * math.sin(2 * math.pi * 20 * time + 1.1);
+      final microvolts = delta + theta + alpha + beta;
+      samples[index] = (microvolts / RawBatch.microvoltsPerUnit)
+          .round()
+          .clamp(-32768, 32767);
+    }
+    _demonstrationSampleIndex += samples.length;
+    _recordRawBatch(
+      RawBatch(
+        seq: _demonstrationRawSequence++,
+        t0: DateTime.now(),
+        poorSignal: 12,
+        dropped: 0,
+        samples: samples,
+      ),
+    );
+  }
+
   void _onHardwareData(EEGData data) {
     if (!mounted ||
         _step != CollectionStep.running ||
@@ -401,11 +459,51 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _onHardwareRaw(RawBatch batch) {
+    if (!mounted ||
+        _step != CollectionStep.running ||
+        _mode != AcquisitionMode.hardware) {
+      return;
+    }
+    setState(() => _recordRawBatch(batch));
+  }
+
+  void _recordRawBatch(RawBatch batch) {
+    if (_phase == CollectionPhase.eyesOpen) {
+      _eyesOpenRaw.add(batch);
+    } else {
+      _eyesClosedRaw.add(batch);
+    }
+    _liveRawMicrovolts.addAll(batch.toMicrovolts());
+    const maximumVisibleSamples = 128 * 5;
+    if (_liveRawMicrovolts.length > maximumVisibleSamples) {
+      _liveRawMicrovolts.removeRange(
+        0,
+        _liveRawMicrovolts.length - maximumVisibleSamples,
+      );
+    }
+  }
+
+  void _clearRawState() {
+    _eyesOpenRaw.clear();
+    _eyesClosedRaw.clear();
+    _liveRawMicrovolts.clear();
+    _spectrumAnalysis = null;
+    _demonstrationRawSequence = 0;
+    _demonstrationSampleIndex = 0;
+  }
+
   void _finishCollection() {
     _timer?.cancel();
     if (!mounted) return;
+    final spectrum = _spectrumAnalyzer.analyze(
+      eyesOpen: _eyesOpenRaw,
+      eyesClosed: _eyesClosedRaw,
+      minimumEpochsPerPhase: _mode == AcquisitionMode.demonstration ? 1 : 20,
+    );
     setState(() {
       _endedAt = DateTime.now();
+      _spectrumAnalysis = spectrum;
       _step = CollectionStep.result;
     });
     _signalUser(strong: true);
@@ -428,6 +526,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _phaseElapsed = Duration.zero;
       _showHardware = false;
       _readings.clear();
+      _clearRawState();
       _startedAt = null;
       _endedAt = null;
       _asrsAnswers.fillRange(0, _asrsAnswers.length, null);
@@ -452,8 +551,10 @@ class _HomeScreenState extends State<HomeScreen> {
       readingCount: _readings.length,
       attentionMean: _displayAttentionMean,
       meditationMean: _displayMeditationMean,
+      spectrum: _spectrumAnalysis,
       asrsScore: asrs?.total,
-      asrsLabel: asrs?.label,
+      asrsLabel: asrs?.possibilityLabel,
+      asrsBandLabel: asrs?.label,
       asrsGuidance: asrs?.guidance,
     );
   }
@@ -803,6 +904,10 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
+        const SizedBox(height: 14),
+        _LiveWaveformCard(
+          samples: List<double>.of(_liveRawMicrovolts, growable: false),
+        ),
         if (_mode == AcquisitionMode.hardware && !_connected) ...[
           const SizedBox(height: 14),
           _Notice(
@@ -893,6 +998,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         const SizedBox(height: 14),
+        _SpectrumResultCard(analysis: _spectrumAnalysis),
+        const SizedBox(height: 14),
         const _Notice(
           icon: Icons.info_outline_rounded,
           text:
@@ -957,6 +1064,7 @@ class _HomeScreenState extends State<HomeScreen> {
           onPressed: () => setState(() {
             _step = CollectionStep.instructions;
             _readings.clear();
+            _clearRawState();
             _startedAt = null;
             _endedAt = null;
             _asrsAnswers.fillRange(0, _asrsAnswers.length, null);
@@ -994,7 +1102,7 @@ class _HomeScreenState extends State<HomeScreen> {
         const _Notice(
           icon: Icons.call_split_rounded,
           text:
-              'Etapa destinada a pessoas com 18 anos ou mais. A pontuação usa apenas estas respostas e não é combinada com o EEG.',
+              'Etapa destinada a pessoas com 18 anos ou mais. Este rastreio não é diagnóstico. A pontuação usa apenas estas respostas e não é combinada com o EEG.',
         ),
         const SizedBox(height: 16),
         Row(
@@ -1331,6 +1439,375 @@ class _MetricCard extends StatelessWidget {
   }
 }
 
+class _LiveWaveformCard extends StatelessWidget {
+  const _LiveWaveformCard({required this.samples});
+
+  final List<double> samples;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.show_chart_rounded, color: Color(0xFF56D6B3)),
+                SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    'EEG bruto ao vivo',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+                Text(
+                  '5 s',
+                  style: TextStyle(color: Color(0xFFAAB8CA), fontSize: 12),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Semantics(
+              label: samples.isEmpty
+                  ? 'Traçado de EEG aguardando dados'
+                  : 'Traçado de EEG bruto ao vivo',
+              child: Container(
+                height: 116,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF091422),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF263A50)),
+                ),
+                child: samples.length < 2
+                    ? const Center(
+                        child: Text(
+                          'Aguardando EEG bruto…',
+                          style: TextStyle(color: Color(0xFF8493A6)),
+                        ),
+                      )
+                    : CustomPaint(painter: _WaveformPainter(samples)),
+              ),
+            ),
+            const SizedBox(height: 9),
+            const Text(
+              'Traçado em microvolts. Piscadas e tensão muscular também aparecem '
+              'aqui; a forma da onda não determina TDAH.',
+              style: TextStyle(
+                color: Color(0xFFAAB8CA),
+                fontSize: 12,
+                height: 1.35,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SpectrumResultCard extends StatelessWidget {
+  const _SpectrumResultCard({required this.analysis});
+
+  final EegSpectrumAnalysis? analysis;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = analysis;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.multiline_chart_rounded, color: Color(0xFF8BBEFF)),
+                SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    'Ondas observadas nesta coleta',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF172A40),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Text(
+                  'NÃO ENTRA NO RASTREIO DE TDAH',
+                  style: TextStyle(
+                    color: Color(0xFFBFD7F3),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            if (value == null || !value.isUsable) ...[
+              const Icon(
+                Icons.signal_cellular_connected_no_internet_4_bar_rounded,
+                size: 42,
+                color: Color(0xFFFFC45C),
+              ),
+              const SizedBox(height: 9),
+              const Text(
+                'Bandas não exibidas',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                value?.qualityExplanation ??
+                    'O fluxo de EEG bruto não forneceu trechos suficientes.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Color(0xFFAAB8CA),
+                  height: 1.4,
+                ),
+              ),
+            ] else ...[
+              Row(
+                children: [
+                  _LegendDot(
+                    color: const Color(0xFF67A7FF),
+                    label: 'Olhos abertos',
+                  ),
+                  const SizedBox(width: 14),
+                  _LegendDot(
+                    color: const Color(0xFF56D6B3),
+                    label: 'Olhos fechados',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 15),
+              for (final band in EegBand.values) ...[
+                _BandComparisonRow(
+                  band: band,
+                  eyesOpen: value.eyesOpen.bands.valueFor(band),
+                  eyesClosed: value.eyesClosed.bands.valueFor(band),
+                ),
+                if (band != EegBand.beta) const SizedBox(height: 12),
+              ],
+              const SizedBox(height: 15),
+              Text(
+                _alphaDescription(value.alphaChangePercent),
+                style: const TextStyle(
+                  color: Color(0xFFD0DCE9),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${(value.acceptedFraction * 100).round()}% dos trechos foram '
+                'aproveitados após o controle de contato, perdas e artefatos.',
+                style: const TextStyle(
+                  color: Color(0xFFAAB8CA),
+                  fontSize: 12,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'As barras mostram a participação relativa de cada banda entre '
+                '1 e 30 Hz. Elas descrevem a sessão e não indicam TDAH.',
+                style: TextStyle(
+                  color: Color(0xFFAAB8CA),
+                  fontSize: 12,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _alphaDescription(double? change) {
+    if (change == null) return 'A variação de alfa não pôde ser calculada.';
+    if (change >= 20) {
+      return 'Nesta coleta, a potência alfa aumentou com os olhos fechados.';
+    }
+    if (change <= -20) {
+      return 'Nesta coleta, a potência alfa foi menor com os olhos fechados.';
+    }
+    return 'Nesta coleta, a potência alfa ficou semelhante nas duas etapas.';
+  }
+}
+
+class _LegendDot extends StatelessWidget {
+  const _LegendDot({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Row(
+        children: [
+          Container(
+            width: 9,
+            height: 9,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              label,
+              style: const TextStyle(color: Color(0xFFAAB8CA), fontSize: 11),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BandComparisonRow extends StatelessWidget {
+  const _BandComparisonRow({
+    required this.band,
+    required this.eyesOpen,
+    required this.eyesClosed,
+  });
+
+  final EegBand band;
+  final double eyesOpen;
+  final double eyesClosed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 48,
+          child: Text(
+            band.label,
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+          ),
+        ),
+        Expanded(
+          child: Column(
+            children: [
+              _PowerBar(value: eyesOpen, color: const Color(0xFF67A7FF)),
+              const SizedBox(height: 5),
+              _PowerBar(value: eyesClosed, color: const Color(0xFF56D6B3)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PowerBar extends StatelessWidget {
+  const _PowerBar({required this.value, required this.color});
+
+  final double value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final safeValue = value.clamp(0, 100).toDouble();
+    return Row(
+      children: [
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: Container(
+              height: 9,
+              color: const Color(0xFF26354A),
+              alignment: Alignment.centerLeft,
+              child: FractionallySizedBox(
+                widthFactor: safeValue / 100,
+                child: ColoredBox(color: color),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 7),
+        SizedBox(
+          width: 34,
+          child: Text(
+            '${safeValue.round()}%',
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _WaveformPainter extends CustomPainter {
+  const _WaveformPainter(this.samples);
+
+  final List<double> samples;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bounds = Offset.zero & size;
+    canvas
+        .clipRRect(RRect.fromRectAndRadius(bounds, const Radius.circular(10)));
+    final grid = Paint()
+      ..color = const Color(0xFF1C3045)
+      ..strokeWidth = 1;
+    for (var row = 1; row < 4; row++) {
+      final y = size.height * row / 4;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
+    }
+    for (var column = 1; column < 5; column++) {
+      final x = size.width * column / 5;
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), grid);
+    }
+
+    var maximum = 5.0;
+    for (final sample in samples) {
+      maximum = math.max(maximum, sample.abs());
+    }
+    maximum = math.min(maximum, 150);
+    final path = Path();
+    for (var index = 0; index < samples.length; index++) {
+      final x =
+          samples.length == 1 ? 0.0 : size.width * index / (samples.length - 1);
+      final normalized = samples[index].clamp(-maximum, maximum) / maximum;
+      final y = size.height / 2 - normalized * size.height * 0.42;
+      if (index == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = const Color(0xFF56D6B3)
+        ..strokeWidth = 1.6
+        ..style = PaintingStyle.stroke
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_WaveformPainter oldDelegate) => true;
+}
+
 class _AsrsResultCard extends StatelessWidget {
   const _AsrsResultCard({required this.result});
 
@@ -1347,8 +1824,30 @@ class _AsrsResultCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const _Eyebrow('RESULTADO DAS RESPOSTAS · ASRS V1.1'),
+            const _Eyebrow('POSSIBILIDADE DE TDAH · RASTREIO ASRS V1.1'),
             const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF26354A),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFF52647B)),
+                ),
+                child: const Text(
+                  'NÃO É DIAGNÓSTICO',
+                  style: TextStyle(
+                    color: Color(0xFFD7E2EE),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.7,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -1380,11 +1879,20 @@ class _AsrsResultCard extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             Text(
-              result.label,
+              result.possibilityLabel,
               style: TextStyle(
                 color: accent,
                 fontSize: 20,
                 fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              result.label,
+              style: const TextStyle(
+                color: Color(0xFFAAB8CA),
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 6),
@@ -1395,8 +1903,8 @@ class _AsrsResultCard extends StatelessWidget {
             const SizedBox(height: 12),
             const Text(
               'Ponto de corte da pontuação atualizada: 14. O ASRS é um '
-              'rastreio para adultos, não uma conclusão clínica. O resultado '
-              'não usa dados do BrainLink.',
+              'rastreio para adultos. A possibilidade mostrada vem somente das '
+              'respostas e não usa dados do BrainLink.',
               style: TextStyle(
                 color: Color(0xFFAAB8CA),
                 fontSize: 12,

@@ -14,7 +14,8 @@ atualizado: 2026-08-17
 > Esta abordagem permanece documentada como alternativa de pesquisa. Diário e
 > histórico continuam fora da interface atual. O ASRS adulto de seis perguntas
 > retornou como etapa curta depois da coleta, visual e matematicamente separado
-> do BrainLink.
+> do BrainLink. Ao atingir o corte 14, ele comunica possibilidade aumentada no
+> rastreio com aviso explícito de que não é diagnóstico.
 
 ## O que é
 
@@ -63,6 +64,8 @@ uma validade que ele não tem — e é, na prática, alegação diagnóstica.
 
 ## O que pode afirmar
 
+- "O ponto de corte 14 foi atingido: há possibilidade aumentada neste rastreio
+  ASRS. Este resultado não é diagnóstico."
 - "Sua pontuação na SNAP-IV foi 22; acima do ponto de corte sugerido pela
   literatura. Vale levar isto a um profissional."
 - "Sua atenção medida pelo dispositivo variou assim ao longo dos últimos 30
@@ -73,7 +76,8 @@ uma validade que ele não tem — e é, na prática, alegação diagnóstica.
 ## O que NÃO pode afirmar
 
 - Que o EEG confirma ou refuta o resultado da escala.
-- Qualquer probabilidade ou risco de TDAH.
+- Qualquer percentual, probabilidade ou risco de TDAH.
+- Que ficar abaixo do corte exclui TDAH.
 - Comparação com outras pessoas ou com uma norma.
 - Que a tendência observada significa melhora ou piora clínica.
 
@@ -83,10 +87,11 @@ uma validade que ele não tem — e é, na prática, alegação diagnóstica.
 sem escore de risco, tende a Classe I — ou fora do escopo de SaMD. Ver
 [[anvisa-rdc-751-regra-11]].
 
-**O gatilho de migração** é administrar a escala e devolver *interpretação
-diagnóstica* em vez de *pontuação bruta com encaminhamento*. A diferença entre
-"sua pontuação foi 22, converse com um profissional" e "sua pontuação sugere
-TDAH" é a diferença entre Classe I e Classe II.
+**O gatilho de migração** é devolver interpretação diagnóstica, probabilidade
+individual ou fundir a escala com o EEG. A mensagem de possibilidade do produto
+fica limitada ao ponto de corte oficial, sem percentual, com encaminhamento e
+"NÃO É DIAGNÓSTICO" no mesmo cartão. O enquadramento regulatório de uma eventual
+distribuição comercial ainda exige avaliação específica.
 
 ## Por que é a recomendada para começar
 

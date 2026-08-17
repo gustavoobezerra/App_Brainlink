@@ -16,9 +16,11 @@ O recorte de interface foi simplificado para uma coleta guiada em uma tela:
 conexão, instruções, duas fases, velocímetro de qualidade e exportação. Diário,
 histórico e persistência não fazem parte do produto atual. O ASRS v1.1 6Q para
 adultos foi incluído depois do velocímetro, com pontuação e exportação separadas
-do EEG. O `CODE_RAW` é
-transportado em lotes e o filtro de 60 Hz está configurado. As lacunas abaixo
-continuam como roteiro de pesquisa, não como capacidades já exibidas.
+do EEG. O `CODE_RAW` é transportado em lotes, desenhado ao vivo e processado por
+FFT em bandas relativas depois de rejeição básica de artefatos; o filtro de 60
+Hz está configurado. Essas bandas são apenas descritivas e nunca entram no
+rastreio. As lacunas abaixo continuam como roteiro de pesquisa, não como
+capacidades clínicas já exibidas.
 
 ## Matriz de dependência
 
@@ -42,18 +44,15 @@ continuam como roteiro de pesquisa, não como capacidades já exibidas.
 
 ## As lacunas críticas
 
-### Consumo de `CODE_RAW`
-**Destrava:** [[A2-indice-espectral-multifeature]] e, por consequência, toda a
-ciência defensável.
+### Validação do `CODE_RAW` no hardware real
+**Destrava:** confiança no pipeline descritivo já implementado.
 
-O maior retorno por esforço do projeto. `CODE_RAW = 128` chega pelo mesmo
-`onDataReceived` já implementado. O SDK ainda oferece `startRecordRawData()` e
-`setRecordStreamFilePath()`, que gravam o stream nativamente e servem de verdade
-de referência para validar qualquer pipeline próprio. Ver [[sdk-libstreamsdk]].
-
-Enviar em **lotes** por `EventChannel`, não amostra a amostra pelo
-`MethodChannel`. Incluir número de sequência para detectar perda de pacote e o
-`poorSignal` vigente. Ver [[ADR-002-consumir-eeg-bruto]].
+`CODE_RAW = 128` já chega ao Dart em lotes pelo `EventChannel`, com sequência,
+perdas e `poorSignal`; a interface mostra o traçado e as bandas relativas. Ainda
+falta comparar uma gravação real com `startRecordRawData()`/
+`setRecordStreamFilePath()` do SDK e ajustar os limiares de artefato no conjunto
+BrainLink + Android usado na apresentação. Ver [[sdk-libstreamsdk]] e
+[[ADR-002-consumir-eeg-bruto]].
 
 ### Rejeição de época
 **Destrava:** credibilidade de tudo.
@@ -61,8 +60,9 @@ Enviar em **lotes** por `EventChannel`, não amostra a amostra pelo
 É a lacuna cuja ausência é mais perigosa, porque o app funciona sem ela — apenas
 produz números errados de forma convincente. Ver [[artefatos-canal-unico]].
 
-A regra que mais protege: **abaixo do limiar de épocas aceitas, a sessão é
-inválida e nenhum número derivado é exibido.**
+A regra que mais protege já está no app: **abaixo do limiar de épocas aceitas,
+a sessão é inválida e nenhum número derivado é exibido.** O que permanece
+aberto é validar e calibrar os limiares em gravações reais.
 
 ### Linha de base intra-sujeito
 **Destrava:** poder mostrar qualquer número sem inventar norma.
@@ -93,22 +93,22 @@ não é lacuna do aplicativo adulto de demonstração.
 B1 (bandas obsoletas), B2 (filtro de 60 Hz) e B6 (modelo sem serialização)
 foram corrigidos. Ver [[auditoria-codigo]] para o estado consolidado.
 
-## Salvaguardas que precisam existir como código
+## Salvaguardas no código e portões restantes
 
 Não como intenção nem como comentário:
 
-1. **Teste de linguagem.** Varre as strings da interface contra os termos
-   proibidos de [[linguagem-permitida]] e falha o build. Um disclaimer some num
-   refactor; uma asserção, não.
-2. **Teste do efeito Berger.** Alfa de olhos fechados maior que de olhos
+1. **Teste de linguagem — implementado.** Varre as strings da interface contra
+   os termos proibidos de [[linguagem-permitida]] e falha o build. Também exige
+   os avisos de não diagnóstico e separação entre ASRS e EEG.
+2. **Teste do efeito Berger no hardware — pendente.** Alfa de olhos fechados maior que de olhos
    abertos, em gravação real. Se falhar, o pipeline está errado e nada depois
    dele vale.
-3. **Validação da FFT contra sinal sintético.** Seno puro de frequência conhecida
-   deve cair no bin certo; ruído 1/f gerado com expoente conhecido deve ser
-   recuperado pelo ajuste.
-4. **Versionamento do pipeline.** Cada sessão grava a versão do algoritmo que a
-   processou. Sem isso, comparar sessões de meses diferentes é comparar coisas
-   distintas em silêncio.
+3. **Validação da FFT contra sinal sintético — implementada para as bandas.**
+   Senoides de 6, 10 e 20 Hz caem em theta, alfa e beta; sinal plano, perda,
+   contato ruim e amplitude excessiva são rejeitados. Ajuste 1/f permanece fora
+   deste produto.
+4. **Versionamento do pipeline — implementado na exportação.** O relatório grava
+   `spectrum-v1.0.0` junto à descrição espectral.
 
 ## Relacionadas
 

@@ -2,19 +2,19 @@
 titulo: "ADR-002 — Consumir CODE_RAW do SDK"
 tags: [adr, hardware/sdk, arquitetura]
 status: consolidado
-atualizado: 2026-08-13
+atualizado: 2026-08-17
 ---
 
 # ADR-002 — Consumir `CODE_RAW` do SDK
 
 ## Status
-`aceita` como direção técnica — implementação condicionada ao escopo de cada fase
+`aceita e implementada` — 17 de agosto de 2026
 
 ## Contexto
 
-Hoje o app consome apenas as saídas pré-processadas do SDK: oito bandas
-agregadas e os índices eSense, a ~1 Hz. `CODE_RAW = 128` chega ao
-`onDataReceived` e cai no `default: break` de `MainActivity.java`.
+Na auditoria inicial, o app consumia apenas as saídas pré-processadas do SDK:
+oito bandas agregadas e os índices eSense, a ~1 Hz. `CODE_RAW = 128` chegava ao
+`onDataReceived` e era descartado por `MainActivity.java`.
 
 Verificação direta do JAR com `javap` confirmou o que está disponível — ver
 [[sdk-libstreamsdk]]:
@@ -43,8 +43,9 @@ defensável, é **matematicamente inalcançável** sem o sinal bruto.
 
 ## Decisão
 
-Consumir `CODE_RAW` na camada Android e expô-lo ao Dart, quando o escopo do
-projeto incluir a camada de análise.
+Consumir `CODE_RAW` na camada Android e expô-lo ao Dart. A decisão foi
+implementada com lotes de 128 amostras no `EventChannel`, traçado ao vivo e
+análise descritiva de bandas no Dart.
 
 Diretrizes de implementação:
 
@@ -53,17 +54,17 @@ Diretrizes de implementação:
 - Cada lote carrega **número de sequência** (para detectar perda de pacote) e o
   `poorSignal` vigente.
 - Usar `startRecordRawData()` do SDK **em paralelo**, como verdade de referência
-  para validar o pipeline próprio.
+  no portão de validação com o hardware real.
 - Converter para microvolts na fronteira: `µV ≈ raw × 0,2197` — ver
   [[chip-tgam-protocolo]].
 - Configurar `MWM15_setFilterType(FILTER_60HZ)` na conexão. **O Brasil é 60 Hz.**
 
 ## Consequências
 
-**Destrava:** FFT e densidade espectral próprias; ajuste aperiódico;
-[[frequencia-alfa-individual]]; bandas relativas ao IAF; detecção real de
-artefato; rejeição de época; e **reprodutibilidade** — com o raw gravado, sessões
-antigas podem ser reprocessadas por um pipeline melhor.
+**Destravou no produto atual:** FFT e potências relativas delta/theta/alfa/beta,
+detecção básica de artefato, rejeição de época e comparação descritiva entre
+olhos abertos e fechados. IAF, ajuste aperiódico e reprocessamento de gravações
+permanecem pesquisa.
 
 **Custa:** volume de dado maior; necessidade de processar fora da thread de UI;
 e um dado mais sensível em repouso, com implicações de [[lgpd-dados-sensiveis]].

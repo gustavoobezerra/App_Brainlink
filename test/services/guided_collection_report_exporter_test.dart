@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:brainlink_app/services/eeg_spectrum_analyzer.dart';
 import 'package:brainlink_app/services/guided_collection_report_exporter.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -51,10 +52,48 @@ void main() {
       readingCount: data.readingCount,
       attentionMean: data.attentionMean,
       meditationMean: data.meditationMean,
+      spectrum: const EegSpectrumAnalysis(
+        eyesOpen: EegPhaseSpectrum(
+          acceptedEpochs: 22,
+          rejectedEpochs: 2,
+          bands: EegBandPowers(
+            delta: 10,
+            theta: 34,
+            alpha: 38,
+            beta: 18,
+          ),
+          absoluteBands: EegBandPowers(
+            delta: 10,
+            theta: 34,
+            alpha: 20,
+            beta: 18,
+          ),
+          spectrum: [],
+        ),
+        eyesClosed: EegPhaseSpectrum(
+          acceptedEpochs: 23,
+          rejectedEpochs: 1,
+          bands: EegBandPowers(
+            delta: 8,
+            theta: 24,
+            alpha: 58,
+            beta: 10,
+          ),
+          absoluteBands: EegBandPowers(
+            delta: 8,
+            theta: 24,
+            alpha: 35,
+            beta: 10,
+          ),
+          spectrum: [],
+        ),
+        minimumEpochsPerPhase: 20,
+      ),
       asrsScore: 18,
-      asrsLabel: 'Faixa superior de rastreio',
+      asrsLabel: 'Possibilidade aumentada no ASRS',
+      asrsBandLabel: 'Faixa superior de rastreio',
       asrsGuidance:
-          'Suas respostas ficaram na faixa que merece avaliação profissional. Este rastreio não confirma TDAH.',
+          'As respostas atingiram o ponto de corte e apontam possibilidade aumentada de TDAH neste rastreio. Este resultado não é diagnóstico.',
     );
 
     final html = exporter.buildHtml(complete);
@@ -62,8 +101,54 @@ void main() {
 
     expect(html, contains('18 de 24'));
     expect(html, contains('separado dos dados do BrainLink'));
+    expect(html, contains('Possibilidade aumentada no ASRS'));
+    expect(html, contains('NÃO É DIAGNÓSTICO'));
+    expect(html, contains('Ondas observadas nesta coleta'));
+    expect(html, contains('Olhos fechados'));
+    expect(html, contains('58.0%'));
     expect(text, contains('Pontuação: 18/24'));
-    expect(text, contains('não confirma TDAH'));
+    expect(text, contains('possibilidade aumentada de TDAH'));
+    expect(text, contains('não é diagnóstico'));
+    expect(text, contains('NÃO ENTRA NO RASTREIO DE TDAH'));
+    expect(text, contains('Pipeline: spectrum-v1.0.0'));
     expect(text, contains('ASRS_v1.1_screener%286Q%29_scoring_update.pdf'));
+  });
+
+  test('não exporta bandas derivadas quando a sessão é inválida', () {
+    const invalidSpectrum = EegSpectrumAnalysis(
+      eyesOpen: EegPhaseSpectrum(
+        acceptedEpochs: 2,
+        rejectedEpochs: 8,
+        bands: EegBandPowers(delta: 10, theta: 20, alpha: 50, beta: 20),
+        absoluteBands: EegBandPowers.empty(),
+        spectrum: [],
+      ),
+      eyesClosed: EegPhaseSpectrum(
+        acceptedEpochs: 1,
+        rejectedEpochs: 9,
+        bands: EegBandPowers(delta: 8, theta: 22, alpha: 55, beta: 15),
+        absoluteBands: EegBandPowers.empty(),
+        spectrum: [],
+      ),
+      minimumEpochsPerPhase: 20,
+    );
+    final invalid = GuidedCollectionReportData(
+      startedAt: data.startedAt,
+      endedAt: data.endedAt,
+      source: data.source,
+      qualityScore: data.qualityScore,
+      qualityLabel: data.qualityLabel,
+      readingCount: data.readingCount,
+      spectrum: invalidSpectrum,
+    );
+
+    final html = exporter.buildHtml(invalid);
+    final text = exporter.buildText(invalid);
+
+    expect(html, contains('Bandas não exibidas'));
+    expect(html, contains('Poucos trechos aproveitáveis'));
+    expect(html, isNot(contains('<table class="bands">')));
+    expect(text, isNot(contains('Delta:')));
+    expect(text, contains('Pipeline: spectrum-v1.0.0'));
   });
 }

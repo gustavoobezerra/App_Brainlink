@@ -1,4 +1,9 @@
+import 'dart:async';
+import 'dart:math' as math;
+import 'dart:typed_data';
+
 import 'package:brainlink_app/data/models/asrs_screener_6.dart';
+import 'package:brainlink_app/data/models/raw_batch.dart';
 import 'package:brainlink_app/ui/screens/home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -70,6 +75,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('Mantenha os olhos abertos'), findsOneWidget);
+    expect(find.text('EEG bruto ao vivo'), findsOneWidget);
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('Agora feche os olhos'), findsOneWidget);
     await tester.pump(const Duration(seconds: 1));
@@ -80,6 +86,10 @@ void main() {
     expect(find.text('de 100'), findsOneWidget);
     expect(find.text('Exportar resultado da coleta'), findsOneWidget);
     expect(find.text('Responder 6 perguntas'), findsOneWidget);
+    expect(find.text('Ondas observadas nesta coleta'), findsOneWidget);
+    expect(find.text('NÃO ENTRA NO RASTREIO DE TDAH'), findsOneWidget);
+    expect(find.text('Delta'), findsOneWidget);
+    expect(find.text('Alfa'), findsOneWidget);
     expect(
       find.textContaining('nota do velocímetro é da coleta'),
       findsOneWidget,
@@ -136,8 +146,126 @@ void main() {
     expect(find.text('18'), findsOneWidget);
     expect(find.text('de 24'), findsOneWidget);
     expect(find.text('Faixa superior de rastreio'), findsOneWidget);
-    expect(find.textContaining('não confirma TDAH'), findsOneWidget);
+    expect(find.text('Possibilidade aumentada no ASRS'), findsOneWidget);
+    expect(
+      find.text('POSSIBILIDADE DE TDAH · RASTREIO ASRS V1.1'),
+      findsOneWidget,
+    );
+    expect(find.text('NÃO É DIAGNÓSTICO'), findsOneWidget);
+    expect(
+        find.textContaining('possibilidade aumentada de TDAH'), findsOneWidget);
+    expect(find.textContaining('não é diagnóstico'), findsWidgets);
     expect(find.text('Exportar os dois resultados'), findsOneWidget);
+  });
+
+  testWidgets('abaixo do corte não afirma ausência de TDAH', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: HomeScreen(
+          demonstrationPhaseDuration: Duration(seconds: 1),
+        ),
+      ),
+    );
+    await _reachDemonstrationResult(tester);
+
+    final screeningButton = find.text('Responder 6 perguntas');
+    await tester.scrollUntilVisible(
+      screeningButton,
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(screeningButton);
+    await tester.pumpAndSettle();
+
+    for (var index = 0; index < AsrsScreener6.itemCount; index++) {
+      final field = find.byKey(ValueKey('asrs_answer_$index'));
+      await tester.scrollUntilVisible(
+        field,
+        450,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(AsrsResponse.never.label).last);
+      await tester.pumpAndSettle();
+    }
+
+    final finishButton = find.text('Concluir e ver os dois resultados');
+    await tester.scrollUntilVisible(
+      finishButton,
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(finishButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ponto de corte não atingido'), findsOneWidget);
+    expect(find.textContaining('Isso não exclui TDAH'), findsOneWidget);
+    expect(find.text('NÃO É DIAGNÓSTICO'), findsOneWidget);
+    expect(
+        find.textContaining('possibilidade aumentada de TDAH'), findsNothing);
+  });
+
+  testWidgets(
+      'consome EEG bruto do hardware e libera bandas com trechos limpos',
+      (tester) async {
+    final rawController = StreamController<RawBatch>();
+    addTearDown(rawController.close);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeScreen(
+          deviceGateway: _FakeGateway(),
+          rawDataStream: rawController.stream,
+          hardwarePhaseDuration: const Duration(seconds: 1),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Conectar BrainLink'));
+    await tester.pumpAndSettle();
+    final connectButton = find.text('Conectar');
+    await tester.scrollUntilVisible(
+      connectButton,
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(connectButton);
+    await tester.pumpAndSettle();
+    final startButton = find.text('Começar teste de 2 minutos');
+    await tester.scrollUntilVisible(
+      startButton,
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(startButton);
+    await tester.pump();
+
+    for (var sequence = 0; sequence < 11; sequence++) {
+      rawController.add(
+        _sineBatch(sequence, frequency: 10, amplitudeMicrovolts: 5),
+      );
+    }
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Agora feche os olhos'), findsOneWidget);
+
+    for (var sequence = 11; sequence < 22; sequence++) {
+      rawController.add(_sineBatch(sequence, frequency: 10));
+    }
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+
+    final waves = find.text('Ondas observadas nesta coleta');
+    await tester.scrollUntilVisible(
+      waves,
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(waves, findsOneWidget);
+    expect(find.text('Bandas não exibidas'), findsNothing);
+    expect(find.textContaining('trechos foram aproveitados'), findsOneWidget);
+    expect(find.textContaining('alfa aumentou'), findsOneWidget);
   });
 }
 
@@ -166,4 +294,25 @@ class _FakeGateway implements DeviceDiscoveryGateway {
 
   @override
   Future<void> connect(ConnectableDevice device) async {}
+}
+
+RawBatch _sineBatch(
+  int sequence, {
+  required double frequency,
+  double amplitudeMicrovolts = 20,
+}) {
+  final samples = Int32List(128);
+  for (var index = 0; index < samples.length; index++) {
+    final absoluteIndex = sequence * samples.length + index;
+    final microvolts = amplitudeMicrovolts *
+        math.sin(2 * math.pi * frequency * absoluteIndex / 128);
+    samples[index] = (microvolts / RawBatch.microvoltsPerUnit).round();
+  }
+  return RawBatch(
+    seq: sequence,
+    t0: DateTime.fromMillisecondsSinceEpoch(sequence * 1000),
+    poorSignal: 0,
+    dropped: 0,
+    samples: samples,
+  );
 }

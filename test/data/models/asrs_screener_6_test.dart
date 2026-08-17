@@ -62,8 +62,15 @@ void main() {
       expect(resultFor(9).band, AsrsScoreBand.lowNegative);
       expect(resultFor(10).band, AsrsScoreBand.highNegative);
       expect(resultFor(13).reachedScreeningCutoff, isFalse);
+      expect(resultFor(13).possibilityLabel, 'Ponto de corte não atingido');
+      expect(resultFor(13).guidance, contains('não exclui TDAH'));
+      expect(resultFor(13).guidance, contains('não é diagnóstico'));
       expect(resultFor(14).band, AsrsScoreBand.lowPositive);
       expect(resultFor(14).reachedScreeningCutoff, isTrue);
+      expect(resultFor(14).possibilityLabel, 'Possibilidade aumentada no ASRS');
+      expect(
+          resultFor(14).guidance, contains('possibilidade aumentada de TDAH'));
+      expect(resultFor(14).guidance, contains('não é diagnóstico'));
       expect(resultFor(17).band, AsrsScoreBand.lowPositive);
       expect(resultFor(18).band, AsrsScoreBand.highPositive);
       expect(resultFor(24).band, AsrsScoreBand.highPositive);

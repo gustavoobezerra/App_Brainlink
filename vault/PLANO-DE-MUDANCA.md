@@ -13,6 +13,13 @@ associados ao TDAH
 **Contexto:** pesquisa acadêmica / TCC
 **Base:** [[README|vault de pesquisa]], 44 notas, 32 fontes
 
+> [!note] Recorte entregue em 17/08/2026
+> O produto de demonstração foi reduzido a um único fluxo, sem diário ou
+> histórico. Já consome EEG bruto, desenha o traçado, calcula bandas descritivas
+> com rejeição de artefatos e aplica o ASRS separadamente. IAF, ajuste
+> aperiódico, linha de base longitudinal e validação clínica continuam como
+> roteiro de pesquisa, não como capacidades do aplicativo entregue.
+
 ---
 
 ## 1. Sumário executivo
@@ -31,8 +38,8 @@ Três achados sustentam a mudança:
    efeitos significativos no subtipo desatento.
 2. A American Academy of Neurology **recomenda formalmente não usá-lo**, citando
    risco de dano por taxa inaceitável de falso-positivo.
-3. O SDK do dispositivo **expõe EEG bruto a 128 Hz** que o projeto hoje descarta —
-   o que torna implementável a alternativa cientificamente recomendada.
+3. O SDK do dispositivo **expõe EEG bruto a 128 Hz**. O produto entregue agora o
+   transporta e o usa para visualização descritiva, sem inferência de TDAH.
 
 **O objetivo não muda. O método muda.** O produto deixa de perseguir um detector
 e passa a ser um instrumento de observação longitudinal, ancorado em escala
@@ -118,7 +125,8 @@ void startRecordRawData();          // gravação nativa, serve de referência
 void MWM15_setFilterType(...);      // FILTER_60HZ — nunca configurado
 ```
 
-O EEG bruto chega hoje ao `MainActivity.java` e cai no `default: break`.
+O EEG bruto, antes descartado, agora é enviado ao Dart em lotes de 128 amostras
+com sequência, qualidade de contato e contagem de perdas.
 
 ---
 
@@ -314,7 +322,9 @@ garante que o projeto tenha entrega mesmo se a Frente 3 der resultado negativo.
 
 ### Poderemos
 
-- "Sua pontuação de rastreio na ASRS v1.1 6Q foi X de 24. Este rastreio não confirma TDAH; converse com um profissional se houver dificuldade no dia a dia."
+- "Sua pontuação de rastreio na ASRS v1.1 6Q foi X de 24. O ponto de corte foi
+  atingido e existe possibilidade aumentada neste rastreio. NÃO É DIAGNÓSTICO;
+  converse com um profissional."
 - "Seu expoente aperiódico nesta sessão foi 1,42; sua mediana pessoal é 1,51."
 - "Seu pico alfa está em 10,1 Hz."
 - "Sua atenção medida variou assim nos últimos 30 dias."
@@ -324,8 +334,9 @@ garante que o projeto tenha entrega mesmo se a Frente 3 der resultado negativo.
 
 ### Não poderemos
 
-- Que o usuário tem, ou pode ter, TDAH.
-- Qualquer probabilidade, risco ou escore diagnóstico.
+- Que o usuário tem TDAH, ou que o aplicativo diagnostica a condição.
+- Qualquer percentual, probabilidade, risco ou escore diagnóstico.
+- Que o EEG mostra ou aumenta uma possibilidade de TDAH.
 - Que o EEG corrobora o resultado da escala.
 - Qualquer comparação com norma populacional ou com outras pessoas.
 - Que qualquer métrica é validada clinicamente.

@@ -3,8 +3,9 @@
 Aplicativo Android de uma única tela para realizar uma coleta guiada com o
 BrainLink Lite. A pessoa escolhe **Ver demonstração** ou **Conectar BrainLink**,
 lê as instruções, acompanha o teste e recebe um resultado simples em formato de
-velocímetro. Depois, adultos podem responder ao rastreio ASRS v1.1 de seis
-perguntas, sem misturá-lo aos dados do aparelho.
+velocímetro, com o traçado ao vivo e uma comparação descritiva das bandas entre
+olhos abertos e fechados. Depois, adultos podem responder ao rastreio ASRS v1.1
+de seis perguntas, sem misturá-lo aos dados do aparelho.
 
 > A nota de 0 a 100 representa somente a qualidade da coleta: contato do sensor
 > e continuidade dos dados. Ela não avalia saúde, TDAH ou capacidade da pessoa.
@@ -18,7 +19,7 @@ Instruções de uso
           ↓
 Olhos abertos → olhos fechados
           ↓
-Velocímetro + dados do aparelho
+Velocímetro + traçado e bandas
           ↓
 ASRS v1.1 6Q (adultos 18+)
           ↓
@@ -34,10 +35,18 @@ Resultados separados → exportar ou repetir
   fabricante, sem classificação da pessoa.
 - Em coleta ruim ou sem dados, esses índices ficam ocultos e o app orienta a
   reposicionar o sensor.
+- Durante a coleta, o app desenha os últimos cinco segundos do EEG bruto. Ao
+  final, mostra delta, theta, alfa e beta apenas quando há trechos limpos
+  suficientes; contato ruim, perdas, sinal plano e amplitudes compatíveis com
+  artefato invalidam os trechos.
+- As bandas descrevem somente esta sessão. Elas não classificam TDAH e ficam
+  marcadas como **NÃO ENTRA NO RASTREIO DE TDAH**.
 - O ASRS gera uma segunda pontuação, de 0 a 24, calculada somente a partir das
   seis respostas; o ponto de corte de rastreio é 14.
-- O ASRS não confirma nem exclui TDAH e é apresentado em um cartão separado da
-  qualidade do EEG.
+- A partir de 14, o app mostra **Possibilidade aumentada no ASRS**; abaixo de
+  14, mostra **Ponto de corte não atingido**. Não calcula percentual de chance.
+- O cartão do ASRS exibe **NÃO É DIAGNÓSTICO**. O resultado não confirma nem
+  exclui TDAH e permanece separado do EEG.
 - Os resultados podem ser exportados em HTML e TXT e compartilhados pelo
   Android.
 
@@ -73,7 +82,7 @@ pode ser atualizada por cima porque o identificador do aplicativo foi mantido.
 lib/
 ├── data/models/       # EEG, Bluetooth e pontuação ASRS
 ├── native/            # contrato Flutter ↔ Android
-├── services/          # exportação dos resultados
+├── services/          # espectro, controle de artefatos e exportação
 └── ui/screens/        # fluxo visual único
 
 android/app/src/main/java/com/brainlink/app/
@@ -101,9 +110,12 @@ O APK é gerado em `build/app/outputs/flutter-apk/app-release.apk`.
 - não há conta, nuvem ou envio automático;
 - arquivos são criados somente quando a pessoa toca em exportar;
 - o headset possui um canal frontal sensível a contato, piscadas e movimento;
+- as potências relativas delta/theta/alfa/beta não têm corte populacional e
+  não permitem concluir TDAH;
 - os índices do fabricante não possuem interpretação clínica;
-- o ASRS v1.1 é um rastreio de sintomas para adultos, não uma conclusão
-  clínica, e nunca é combinado ao EEG;
+- somente o ASRS v1.1 produz a mensagem de possibilidade de TDAH: ele é um
+  rastreio de sintomas para adultos, não uma conclusão clínica, e nunca é
+  combinado ao EEG;
 - a integração final deve ser exercitada com o BrainLink Lite físico e o
   Android que serão usados na apresentação.
 

@@ -30,10 +30,20 @@ void main() {
           '${violations.join('\n')}',
     );
   });
+
+  test('possibilidade fica qualificada como rastreio e não diagnóstico', () {
+    final source = File('lib/ui/screens/home_screen.dart').readAsStringSync();
+
+    expect(source, contains('POSSIBILIDADE DE TDAH · RASTREIO ASRS V1.1'));
+    expect(source, contains('NÃO É DIAGNÓSTICO'));
+    expect(source, contains('NÃO ENTRA NO RASTREIO DE TDAH'));
+    expect(source, contains('não usa dados do BrainLink'));
+  });
 }
 
 final _forbiddenPatterns = <RegExp>[
-  RegExp(r'\bdiagnostic[a-z]*\b'),
+  RegExp(
+      r'\b(?:faz|fornece|realiza|confirma)\s+(?:um\s+|o\s+)?diagnostic[a-z]*\b'),
   RegExp(r'\bdetecta\s+tdah\b'),
   RegExp(r'\bidentifica\s+tdah\b'),
   RegExp(r'\brisco\s+de\s+tdah\b'),

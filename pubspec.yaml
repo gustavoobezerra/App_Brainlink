@@ -1,7 +1,7 @@
 name: brainlink_app
 description: "Coleta guiada e demonstração acadêmica com o BrainLink Lite."
 publish_to: 'none'
-version: 1.2.0+3
+version: 1.3.0+4
 
 environment:
   sdk: ^3.5.0

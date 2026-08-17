@@ -2,7 +2,7 @@
 titulo: "ADR-004 — Linguagem não diagnóstica e referência intra-sujeito"
 tags: [adr, regulatorio/anvisa, produto, risco/alto]
 status: consolidado
-atualizado: 2026-08-13
+atualizado: 2026-08-17
 ---
 
 # ADR-004 — Linguagem não diagnóstica e referência intra-sujeito
@@ -30,7 +30,7 @@ família pode adiar avaliação profissional por causa de um número verde.
 
 ## Decisão
 
-Adotar quatro regras **estruturais**, que atuam sobre o que a interface faz — não
+Adotar cinco regras **estruturais**, que atuam sobre o que a interface faz — não
 sobre o que ela avisa.
 
 1. **Nenhum escore composto único.** Nada de "Índice de Atenção: 68". Features
@@ -49,6 +49,11 @@ sobre o que ela avisa.
    `EEGData.empty()` devolve zeros que a interface mostra como "0", indistinguível
    de uma medida real — ver [[auditoria-codigo]], B7.
 
+5. **Possibilidade de TDAH vem exclusivamente do ASRS.** O corte oficial 14 pode
+   produzir a mensagem "possibilidade aumentada no rastreio", sem percentual e
+   com "NÃO É DIAGNÓSTICO" no mesmo cartão. EEG, bandas, eSense e qualidade da
+   coleta não entram no cálculo nem corroboram o resultado.
+
 A lista de termos proibidos e permitidos vive em [[linguagem-permitida]], que é
 fonte única de verdade e prevalece sobre qualquer outro documento em caso de
 conflito.
@@ -60,6 +65,8 @@ conflito.
   declarada; mudanças nessa declaração exigem novo ADR.
 - A regra 3 significa que o app às vezes não mostra nada. É o comportamento
   correto.
+- O rastreio pode orientar avaliação profissional, mas nunca substituí-la; ficar
+  abaixo do corte também não exclui TDAH.
 - A lista de termos proibidos deve virar **teste automatizado** que falha o
   build — um disclaimer some num refactor, uma asserção não.
 

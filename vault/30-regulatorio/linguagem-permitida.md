@@ -2,7 +2,7 @@
 titulo: Linguagem permitida na interface
 tags: [regulatorio/anvisa, produto, risco/alto]
 status: consolidado
-atualizado: 2026-08-13
+atualizado: 2026-08-17
 ---
 
 # Linguagem permitida na interface
@@ -27,7 +27,7 @@ diagnóstica:
 
 | Proibido | Por quê |
 | --- | --- |
-| "diagnóstico", "diagnosticar" | Ato privativo de profissional habilitado |
+| afirmar que o app "faz", "fornece" ou "confirma diagnóstico" | Ato privativo de profissional habilitado |
 | "detecta TDAH", "identifica TDAH" | Alegação diagnóstica direta |
 | "risco de TDAH", "probabilidade de TDAH" | Alegação diagnóstica probabilística |
 | "você tem", "seu resultado indica que" | Veredito |
@@ -47,11 +47,13 @@ diagnóstica:
 | "tendência ao longo dos últimos 30 dias" | Série temporal, sem interpretação |
 | "sua pontuação na escala SNAP-IV foi X" | Escore bruto de instrumento validado |
 | "esta pontuação sugere conversar com um profissional" | Encaminhamento, não conclusão |
+| "possibilidade de TDAH no rastreio ASRS" | Somente a partir do ASRS oficial, sem EEG, sem percentual e com "NÃO É DIAGNÓSTICO" adjacente |
+| "este resultado não é diagnóstico" | Nega explicitamente finalidade diagnóstica |
 | "registro para levar à consulta" | Posiciona como insumo, não resultado |
 | "índice do fabricante (algoritmo proprietário)" | Honesto sobre [[indices-esense]] |
 | "qualidade insuficiente — reposicione o sensor" | Ver regra de invalidação abaixo |
 
-## As quatro regras estruturais
+## As cinco regras estruturais
 
 Mais eficazes que qualquer disclaimer, porque atuam sobre o que a interface faz,
 não sobre o que ela avisa.
@@ -73,6 +75,12 @@ projeto — ver [[artefatos-canal-unico]].
 **4. Ausência de dado é exibida como ausência.** Hoje `EEGData.empty()` devolve
 zeros, e a interface mostra "0" — indistinguível de um zero real medido. Ver
 [[auditoria-codigo]].
+
+**5. Possibilidade vem apenas do ASRS.** O aplicativo pode comunicar
+"possibilidade aumentada no rastreio" quando a soma oficial atingir o corte 14,
+desde que mostre no mesmo cartão que não é diagnóstico. EEG, eSense, bandas,
+qualidade de contato e modo demonstração não entram nessa decisão. Abaixo do
+corte, a redação é "ponto de corte não atingido", nunca "sem TDAH".
 
 ## Como isto vira garantia e não intenção
 

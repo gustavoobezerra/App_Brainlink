@@ -78,6 +78,11 @@ alternativos.
 Uma pontuação acima do corte significa "estes sintomas merecem avaliação
 profissional". Nada além disso.
 
+Na interface, soma igual ou superior a 14 aparece como **possibilidade aumentada
+no rastreio ASRS**, sempre ao lado de **NÃO É DIAGNÓSTICO** e sem percentual.
+Abaixo de 14, o app diz apenas **ponto de corte não atingido**: isso não exclui
+TDAH. O cálculo recebe exclusivamente as seis respostas.
+
 ## Por que ancoram a abordagem recomendada
 
 [[A1-diario-de-atencao]] se apoia nelas por três razões:
