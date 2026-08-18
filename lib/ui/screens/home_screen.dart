@@ -110,7 +110,8 @@ class NativeBrainLinkGateway implements DeviceDiscoveryGateway {
     try {
       final started = await bridge.connect(device.id);
       if (!started) {
-        throw StateError(nativeError ?? 'A conexão Bluetooth não foi iniciada.');
+        throw StateError(
+            nativeError ?? 'A conexão Bluetooth não foi iniciada.');
       }
       await connected.future.timeout(const Duration(seconds: 12));
     } finally {
