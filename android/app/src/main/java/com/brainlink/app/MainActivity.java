@@ -178,6 +178,9 @@ public class MainActivity extends FlutterActivity {
             case "stopScan":
                 result.success(stopClassicDiscovery());
                 return;
+            case "getDiagnostics":
+                result.success(collectDiagnostics());
+                return;
             case "getStorageRoot":
                 result.success(getFilesDir().getAbsolutePath());
                 return;
@@ -498,6 +501,14 @@ public class MainActivity extends FlutterActivity {
                 sendConnectionStateToDart(connected);
                 if (connectionState == ConnectionStates.STATE_GET_DATA_TIME_OUT) {
                     sendErrorToDart("O BrainLink parou de enviar dados (tempo limite excedido).");
+                } else if (connectionState == ConnectionStates.STATE_FAILED
+                        || connectionState == ConnectionStates.STATE_ERROR) {
+                    // Sem isto o Dart só descobre a falha pelo tempo limite de
+                    // doze segundos, e sem saber a causa.
+                    sendErrorToDart(
+                            "O BrainLink recusou a conexão. Confirme que ele está ligado, "
+                                    + "com carga e fora de outro aparelho, e toque em Conectar de novo."
+                    );
                 }
             }
 
@@ -778,6 +789,69 @@ public class MainActivity extends FlutterActivity {
                 || connectionState == ConnectionStates.STATE_FAILED
                 || connectionState == ConnectionStates.STATE_ERROR
                 || connectionState == ConnectionStates.STATE_GET_DATA_TIME_OUT;
+    }
+
+    /**
+     * Retrato do que a conexão depende, para diagnosticar falhas em campo.
+     *
+     * <p>Não exige permissão: só lê estado que o próprio app já pode consultar.
+     */
+    private Map<String, Object> collectDiagnostics() {
+        Map<String, Object> info = new HashMap<>();
+        try {
+            info.put("appVersion", getPackageManager()
+                    .getPackageInfo(getPackageName(), 0).versionName);
+        } catch (PackageManager.NameNotFoundException ignored) {
+            info.put("appVersion", "desconhecida");
+        }
+        info.put("manufacturer", Build.MANUFACTURER);
+        info.put("model", Build.MODEL);
+        info.put("androidRelease", Build.VERSION.RELEASE);
+        info.put("sdkInt", Build.VERSION.SDK_INT);
+        info.put("bluetoothAvailable", bluetoothAdapter != null);
+
+        boolean enabled = false;
+        try {
+            enabled = bluetoothAdapter != null && bluetoothAdapter.isEnabled();
+        } catch (SecurityException ignored) {
+            // Estado indisponível sem permissão; segue como desligado.
+        }
+        info.put("bluetoothEnabled", enabled);
+        info.put("locationServiceEnabled", isLocationServiceEnabled());
+        info.put("permissionScan", hasBluetoothScanPermission());
+        info.put("permissionConnect", hasBluetoothConnectPermission());
+        info.put("permissionLocation", hasLocationPermission());
+
+        int bonded = -1;
+        String bondedNames = "";
+        if (hasBluetoothConnectPermission() && bluetoothAdapter != null) {
+            try {
+                StringBuilder names = new StringBuilder();
+                bonded = 0;
+                for (BluetoothDevice device : bluetoothAdapter.getBondedDevices()) {
+                    bonded++;
+                    if (names.length() > 0) {
+                        names.append(", ");
+                    }
+                    String name = device.getName();
+                    names.append(name == null || name.trim().isEmpty()
+                            ? UNKNOWN_DEVICE_NAME
+                            : name.trim());
+                }
+                bondedNames = names.toString();
+            } catch (SecurityException ignored) {
+                bonded = -1;
+            }
+        }
+        info.put("bondedCount", bonded);
+        info.put("bondedNames", bondedNames);
+        return info;
+    }
+
+    private boolean hasBluetoothConnectPermission() {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.S
+                || checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)
+                == PackageManager.PERMISSION_GRANTED;
     }
 
     private boolean hasLocationPermission() {

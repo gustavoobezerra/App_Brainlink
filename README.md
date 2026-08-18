@@ -81,6 +81,12 @@ Resultados separados → exportar ou repetir
    com ela desligada, qualquer que seja a permissão concedida ao app.
 3. Verifique se o BrainLink não está conectado a outro celular ou aplicativo.
 
+Se ainda assim falhar, toque em **Compartilhar diagnóstico** no painel de
+conexão. O arquivo gerado traz o modelo do aparelho, a versão do Android, o
+estado do Bluetooth e da localização, as permissões concedidas, os aparelhos
+pareados e a sequência de eventos da tentativa — é o que permite identificar a
+causa sem ter o aparelho em mãos.
+
 Se o indicador mostrar coleta ruim, limpe e seque os pontos de contato,
 reposicione o sensor e o clipe e repita. Piscadas frequentes, fala, movimento,
 cabelo, suor ou cosméticos entre metal e pele podem degradar o sinal.

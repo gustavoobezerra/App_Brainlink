@@ -141,6 +141,18 @@ class BrainLinkBridge {
     }
   }
 
+  /// Estado do Android de que a conexão depende, para diagnóstico em campo.
+  Future<Map<String, Object?>> getDiagnostics() async {
+    try {
+      final result =
+          await _channel.invokeMapMethod<String, Object?>('getDiagnostics');
+      return result ?? const {};
+    } on PlatformException catch (error, stackTrace) {
+      _logger.error('Diagnóstico indisponível', error, stackTrace);
+      return const {};
+    }
+  }
+
   /// Diretório privado do aplicativo, usado pela persistência local.
   Future<String?> getStorageRoot() async {
     try {

@@ -88,6 +88,19 @@ espera — o único que completava era o obsoleto.
 | nome resolvido tardiamente substitui o genérico | o BrainLink é identificável na lista |
 | erro de checksum limitado a um a cada 3 s | contato ruim não inunda a interface |
 
+## Instrumentação para o teste em campo
+
+O aparelho real está com outra pessoa, então a falha precisa chegar descrita.
+Duas lacunas fechadas antes de distribuir o APK:
+
+- `STATE_FAILED` e `STATE_ERROR` não produziam `onError`. Uma conexão SPP
+  recusada só aparecia como o tempo limite de doze segundos do Dart, com texto
+  genérico; agora falha imediatamente e diz o motivo.
+- o `Logger` é silencioso em build release, por construção. Entrou
+  `ConnectionDiagnostics`, que guarda os eventos de busca, estado, erro e
+  conexão e os exporta com o retrato do Android — versão, Bluetooth,
+  localização, permissões e pareados — pelo `FileProvider` já existente.
+
 ## Limites abertos
 
 - a conexão está coberta por teste sobre o canal de plataforma simulado, mas

@@ -55,6 +55,25 @@ void main() {
     expect(find.text('Começar teste de 2 minutos'), findsOneWidget);
   });
 
+  testWidgets('oferece o diagnóstico de conexão no painel do hardware',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(home: HomeScreen(deviceGateway: _FakeGateway())),
+    );
+
+    await tester.tap(find.text('Conectar BrainLink'));
+    await tester.pumpAndSettle();
+
+    // Quem testa em campo precisa alcançar o relatório sem instrução extra.
+    final botao = find.text('Compartilhar diagnóstico');
+    await tester.scrollUntilVisible(
+      botao,
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(botao, findsOneWidget);
+  });
+
   testWidgets('guia as fases e apresenta indicador visual com resultado',
       (tester) async {
     await tester.pumpWidget(

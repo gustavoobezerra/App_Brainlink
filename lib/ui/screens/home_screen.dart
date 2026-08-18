@@ -11,6 +11,7 @@ import '../../data/models/eeg_data.dart';
 import '../../data/models/raw_batch.dart';
 import '../../native/brainlink_bridge.dart';
 import '../../services/eeg_spectrum_analyzer.dart';
+import '../../services/connection_diagnostics.dart';
 import '../../services/guided_collection_report_exporter.dart';
 
 enum AcquisitionMode { demonstration, hardware }
@@ -146,12 +147,14 @@ class _HomeScreenState extends State<HomeScreen> {
   final GuidedCollectionReportExporter _exporter =
       const GuidedCollectionReportExporter();
   final EegSpectrumAnalyzer _spectrumAnalyzer = const EegSpectrumAnalyzer();
+  final ConnectionDiagnostics _diagnostics = ConnectionDiagnostics();
 
   late final DeviceDiscoveryGateway _deviceGateway;
   StreamSubscription<EEGData>? _dataSubscription;
   StreamSubscription<RawBatch>? _rawSubscription;
   StreamSubscription<bool>? _connectionSubscription;
   StreamSubscription<String>? _errorSubscription;
+  StreamSubscription<String>? _statusSubscription;
   Timer? _timer;
 
   CollectionStep _step = CollectionStep.choice;
@@ -177,6 +180,8 @@ class _HomeScreenState extends State<HomeScreen> {
   List<ConnectableDevice> _devices = const [];
   String? _connectionMessage;
   String? _exportMessage;
+  String? _diagnosticsMessage;
+  bool _sharingDiagnostics = false;
 
   @override
   void initState() {
@@ -196,7 +201,14 @@ class _HomeScreenState extends State<HomeScreen> {
             'O fluxo de EEG bruto foi interrompido. Reconecte e repita a coleta.');
       },
     );
+    _statusSubscription = _bridge.connectionStatusStream.listen(
+      (status) => _diagnostics.record('estado', status),
+    );
     _connectionSubscription = _bridge.connectionStateStream.listen((connected) {
+      _diagnostics.record(
+        'conexão',
+        connected ? 'conectado' : 'desconectado',
+      );
       if (!mounted) return;
       setState(() {
         _connected = connected;
@@ -209,6 +221,7 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     });
     _errorSubscription = _bridge.errorStream.listen((message) {
+      _diagnostics.record('erro', message);
       if (!mounted) return;
       setState(() => _connectionMessage = message);
     });
@@ -221,6 +234,7 @@ class _HomeScreenState extends State<HomeScreen> {
     unawaited(_rawSubscription?.cancel());
     unawaited(_connectionSubscription?.cancel());
     unawaited(_errorSubscription?.cancel());
+    unawaited(_statusSubscription?.cancel());
     super.dispose();
   }
 
@@ -325,8 +339,15 @@ class _HomeScreenState extends State<HomeScreen> {
       _devices = const [];
       _connectionMessage = null;
     });
+    _diagnostics.record('busca', 'iniciada');
     try {
       final devices = await _deviceGateway.listDevices();
+      _diagnostics.record(
+        'busca',
+        '${devices.length} aparelho(s): '
+            '${devices.map((device) => '${device.name} '
+                '[${device.isPaired ? 'pareado' : 'novo'}]').join(', ')}',
+      );
       if (!mounted) return;
       setState(() {
         _devices = devices;
@@ -339,6 +360,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         // O Android costuma explicar melhor a falha do que uma frase genérica.
         final detail = error is StateError ? error.message : null;
+        _diagnostics.record('busca', 'falhou: ${detail ?? error}');
         setState(() => _connectionMessage = detail ??
             'Não foi possível buscar agora. Confira Bluetooth e permissões.');
       }
@@ -353,6 +375,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _connecting = true;
       _connectionMessage = 'Conectando a ${device.name}…';
     });
+    _diagnostics.record('conexão', 'tentando ${device.name} (${device.id})');
     try {
       await _deviceGateway.connect(device);
       if (!mounted) return;
@@ -362,6 +385,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _step = CollectionStep.instructions;
       });
     } on Object catch (error) {
+      _diagnostics.record('conexão', 'falhou: $error');
       if (mounted) {
         final detail = error is StateError ? error.message : null;
         setState(() => _connectionMessage = detail ??
@@ -622,6 +646,38 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _shareDiagnostics() async {
+    if (_sharingDiagnostics) return;
+    setState(() {
+      _sharingDiagnostics = true;
+      _diagnosticsMessage = 'Preparando diagnóstico…';
+    });
+    try {
+      final device = await _bridge.getDiagnostics();
+      final root = await _bridge.getStorageRoot();
+      if (root == null || root.isEmpty) {
+        throw StateError('Armazenamento indisponível.');
+      }
+      final file = await _diagnostics.write(
+        Directory('$root${Platform.pathSeparator}diagnosticos'),
+        appVersion: device['appVersion'] as String? ?? 'desconhecida',
+        device: device,
+      );
+      final shared = await _bridge.shareFile(file.path, mimeType: 'text/plain');
+      if (!mounted) return;
+      setState(() => _diagnosticsMessage = shared
+          ? 'Diagnóstico pronto para enviar.'
+          : 'Diagnóstico salvo em ${file.path}');
+    } on Object {
+      if (mounted) {
+        setState(() =>
+            _diagnosticsMessage = 'Não foi possível gerar o diagnóstico.');
+      }
+    } finally {
+      if (mounted) setState(() => _sharingDiagnostics = false);
+    }
+  }
+
   void _message(String message) {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
@@ -798,6 +854,28 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: const TextStyle(color: Color(0xFFD0DCE9)),
               ),
             ],
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _sharingDiagnostics ? null : _shareDiagnostics,
+                icon: _sharingDiagnostics
+                    ? const SizedBox.square(
+                        dimension: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.description_outlined, size: 18),
+                label: const Text('Compartilhar diagnóstico'),
+              ),
+            ),
+            if (_diagnosticsMessage != null)
+              Text(
+                _diagnosticsMessage!,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF96A7BA),
+                ),
+              ),
           ],
         ),
       ),
