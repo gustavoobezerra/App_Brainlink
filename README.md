@@ -65,11 +65,21 @@ Resultados separados → exportar ou repetir
    sem cabelo entre sensor e pele. Ajuste o clipe para contato direto com o
    lóbulo da orelha.
 4. Abra o app, toque em **Conectar BrainLink**, permita o acesso ao Bluetooth e
-   escolha o dispositivo.
+   escolha o dispositivo. O Android também pede localização: ela só serve para
+   encontrar aparelhos ainda não pareados. Recusar não impede nada — o BrainLink
+   pareado no passo 2 continua aparecendo na lista.
 5. Sente-se confortavelmente. Evite falar, tensionar a testa ou a mandíbula e
    movimentar a cabeça.
 6. Inicie: fique 1 minuto com os olhos abertos olhando para um ponto fixo. Ao
    aviso sonoro/tátil, feche os olhos por mais 1 minuto, sem apertá-los.
+
+### Se o BrainLink não aparece na lista
+
+1. Confirme que ele está pareado em **Configurações → Bluetooth**. Esse é o
+   caminho garantido: o app lista os pareados mesmo quando a busca ativa falha.
+2. Ligue a **Localização** do sistema. O Android não devolve aparelhos novos
+   com ela desligada, qualquer que seja a permissão concedida ao app.
+3. Verifique se o BrainLink não está conectado a outro celular ou aplicativo.
 
 Se o indicador mostrar coleta ruim, limpe e seque os pontos de contato,
 reposicione o sensor e o clipe e repita. Piscadas frequentes, fala, movimento,

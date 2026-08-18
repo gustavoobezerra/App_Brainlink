@@ -5,12 +5,21 @@
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
 
-    <!-- Bluetooth Clássico no Android 12 ou posterior. -->
+    <!--
+      Bluetooth Clássico (SPP) no Android 12 ou posterior. Sem
+      usesPermissionFlags="neverForLocation": aquele sinalizador descreve a
+      varredura BLE, e a descoberta clássica usada pelo BrainLink pode derivar
+      localização, então o sistema exige ACCESS_FINE_LOCATION junto.
+    -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
-    <!-- Discovery clássico exige localização em Android 6–11. -->
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
+    <!--
+      Exigida pela descoberta clássica em toda versão a partir do Android 6.
+      Sem limite de maxSdkVersion o app consegue pedi-la também no Android 12+,
+      onde antes ela era declarada e nunca podia ser concedida.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 

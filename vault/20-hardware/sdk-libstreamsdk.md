@@ -2,7 +2,7 @@
 titulo: SDK libStreamSDK v1.3.2 — API real
 tags: [hardware/sdk, codigo, evidencia/verificada]
 status: consolidado
-atualizado: 2026-08-13
+atualizado: 2026-08-18
 ---
 
 # SDK libStreamSDK v1.3.2 — API real
@@ -105,11 +105,24 @@ Os construtores recebem `BluetoothDevice`/`BluetoothAdapter`, e a implementaçã
 interna usa `BluetoothSocket` e `UUID` — assinatura inequívoca de SPP (Serial
 Port Profile).
 
-Isso torna o `AndroidManifest.xml` atual inadequado: ele declara
-`BLUETOOTH_SCAN` com `usesPermissionFlags="neverForLocation"` e limita
-`ACCESS_FINE_LOCATION` a `maxSdkVersion="30"`, que é a configuração de BLE.
-Descoberta clássica usa `BluetoothAdapter.startDiscovery()` e
-`getBondedDevices()`, não varredura BLE.
+Isso governa o `AndroidManifest.xml`. A configuração de BLE —
+`BLUETOOTH_SCAN` com `usesPermissionFlags="neverForLocation"` e
+`ACCESS_FINE_LOCATION` limitada a `maxSdkVersion="30"` — não serve aqui:
+descoberta clássica usa `BluetoothAdapter.startDiscovery()` e
+`getBondedDevices()`, pode derivar localização e por isso o sistema cobra
+`ACCESS_FINE_LOCATION` junto do `BLUETOOTH_SCAN`.
+
+> [!warning] O híbrido quebrado
+> Entre `38f373a` e agosto de 2026 o manifesto ficou no pior dos dois mundos:
+> **sem** `neverForLocation` (logo, o sistema exigia localização) e **com**
+> `ACCESS_FINE_LOCATION` travada em `maxSdkVersion="30"` (logo, no Android 12+
+> ela nunca podia ser concedida). `startDiscovery()` devolvia `false` em
+> silêncio e o app só exibia "dispositivos por perto". Ver [[auditoria-codigo]].
+
+A configuração correta declara `ACCESS_FINE_LOCATION` sem teto de versão e a
+pede junto do `BLUETOOTH_SCAN` quando a busca começa — como permissão
+**desejável**, não obrigatória: negá-la reduz a busca a aparelhos já pareados,
+que é justamente o caminho garantido de conexão do BrainLink.
 
 O comentário em `MainActivity.java` afirmando que "a descoberta BLE é executada
 pela camada Flutter" está factualmente errado.

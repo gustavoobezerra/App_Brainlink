@@ -10,6 +10,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
@@ -26,10 +27,10 @@ import com.neurosky.connection.TgStreamReader;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import io.flutter.embedding.android.FlutterActivity;
 import io.flutter.embedding.engine.FlutterEngine;
@@ -44,10 +45,12 @@ public class MainActivity extends FlutterActivity {
     private static final int BLUETOOTH_PERMISSION_REQUEST = 4102;
     private static final int RAW_BATCH_SIZE = 128;
     private static final int DATA_TIMEOUT_MILLIS = 5000;
+    private static final int CHECKSUM_ERROR_INTERVAL_MILLIS = 3000;
+    private static final String UNKNOWN_DEVICE_NAME = "Dispositivo Bluetooth";
 
     private final Object readerLock = new Object();
     private final Object rawLock = new Object();
-    private final Set<String> discoveredAddresses = new HashSet<>();
+    private final Map<String, String> discoveredDevices = new HashMap<>();
     private final int[] rawBuffer = new int[RAW_BATCH_SIZE];
 
     private MethodChannel methodChannel;
@@ -57,6 +60,8 @@ public class MainActivity extends FlutterActivity {
     private Handler mainHandler;
     private BluetoothAdapter bluetoothAdapter;
     private boolean discoveryReceiverRegistered;
+    private boolean discoveryActive;
+    private long lastChecksumErrorAt;
 
     private MethodChannel.Result pendingPermissionResult;
     private PermissionAction pendingPermissionAction;
@@ -96,9 +101,15 @@ public class MainActivity extends FlutterActivity {
                 }
                 emitDevice(device, false);
             } else if (BluetoothAdapter.ACTION_DISCOVERY_STARTED.equals(action)) {
+                discoveryActive = true;
                 sendScanStateToDart(true);
             } else if (BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(action)) {
-                sendScanStateToDart(false);
+                // Um cancelDiscovery() anterior também dispara este evento. Sem
+                // o filtro, a busca recém-iniciada terminaria no mesmo instante.
+                if (discoveryActive) {
+                    discoveryActive = false;
+                    sendScanStateToDart(false);
+                }
             }
         }
     };
@@ -203,31 +214,36 @@ public class MainActivity extends FlutterActivity {
         requestPermissions(missing, BLUETOOTH_PERMISSION_REQUEST);
     }
 
+    /**
+     * Permissões que faltam para a ação pedida.
+     *
+     * <p>A descoberta clássica também pede ACCESS_FINE_LOCATION no Android 12+:
+     * BLUETOOTH_SCAN é declarada sem {@code neverForLocation} porque a varredura
+     * SPP pode derivar localização. A localização entra como desejável, não como
+     * obrigatória — negá-la ainda deixa os aparelhos pareados utilizáveis.
+     */
     private String[] missingBluetoothPermissions(boolean discovery) {
+        List<String> missing = new ArrayList<>();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            boolean connectMissing = checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)
-                    != PackageManager.PERMISSION_GRANTED;
-            boolean scanMissing = discovery
-                    && checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)
-                    != PackageManager.PERMISSION_GRANTED;
-            if (connectMissing && scanMissing) {
-                return new String[]{
-                        Manifest.permission.BLUETOOTH_CONNECT,
-                        Manifest.permission.BLUETOOTH_SCAN
-                };
+            if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)
+                    != PackageManager.PERMISSION_GRANTED) {
+                missing.add(Manifest.permission.BLUETOOTH_CONNECT);
             }
-            if (connectMissing) {
-                return new String[]{Manifest.permission.BLUETOOTH_CONNECT};
+            if (discovery && checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)
+                    != PackageManager.PERMISSION_GRANTED) {
+                missing.add(Manifest.permission.BLUETOOTH_SCAN);
             }
-            if (scanMissing) {
-                return new String[]{Manifest.permission.BLUETOOTH_SCAN};
-            }
-        } else if (discovery
-                && checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {
-            return new String[]{Manifest.permission.ACCESS_FINE_LOCATION};
         }
-        return new String[0];
+        if (discovery && checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            missing.add(Manifest.permission.ACCESS_FINE_LOCATION);
+        }
+        return missing.toArray(new String[0]);
+    }
+
+    /** A localização melhora a descoberta, mas nunca impede a ação. */
+    private static boolean isOptionalPermission(String permission) {
+        return Manifest.permission.ACCESS_FINE_LOCATION.equals(permission);
     }
 
     @Override
@@ -250,9 +266,14 @@ public class MainActivity extends FlutterActivity {
             return;
         }
 
+        // Só as permissões obrigatórias decidem: sem localização a descoberta
+        // fica limitada, mas os aparelhos já pareados continuam acessíveis.
         boolean granted = grantResults.length > 0;
-        for (int grantResult : grantResults) {
-            granted &= grantResult == PackageManager.PERMISSION_GRANTED;
+        for (int index = 0; index < grantResults.length; index++) {
+            if (isOptionalPermission(permissions[index])) {
+                continue;
+            }
+            granted &= grantResults[index] == PackageManager.PERMISSION_GRANTED;
         }
         if (granted) {
             action.run();
@@ -276,16 +297,40 @@ public class MainActivity extends FlutterActivity {
                 return false;
             }
 
+            discoveryActive = false;
             if (bluetoothAdapter.isDiscovering()) {
                 bluetoothAdapter.cancelDiscovery();
             }
-            discoveredAddresses.clear();
+            discoveredDevices.clear();
+
+            // Os pareados saem antes de qualquer coisa que possa falhar: eles
+            // dependem só de BLUETOOTH_CONNECT e são o caminho garantido para
+            // conectar o BrainLink mesmo sem varredura ativa.
             for (BluetoothDevice device : bluetoothAdapter.getBondedDevices()) {
                 emitDevice(device, true);
             }
 
+            // A descoberta clássica não devolve resultado com a localização do
+            // sistema desligada, em nenhuma versão do Android desde a 6.
+            if (!isLocationServiceEnabled()) {
+                sendErrorToDart(
+                        "Ative a Localização do Android para procurar aparelhos novos. "
+                                + "O BrainLink já pareado continua na lista."
+                );
+                return false;
+            }
+
+            if (!hasLocationPermission()) {
+                sendErrorToDart(
+                        "Sem a permissão de localização o Android não lista aparelhos novos. "
+                                + "O BrainLink já pareado continua na lista."
+                );
+                return false;
+            }
+
+            // O estado de busca chega ao Dart pelo ACTION_DISCOVERY_STARTED, que
+            // é o único momento em que a descoberta está de fato em andamento.
             boolean started = bluetoothAdapter.startDiscovery();
-            sendScanStateToDart(started);
             if (!started) {
                 sendErrorToDart("O Android não conseguiu iniciar a descoberta Bluetooth.");
             }
@@ -298,6 +343,11 @@ public class MainActivity extends FlutterActivity {
 
     private boolean stopClassicDiscovery() {
         if (bluetoothAdapter == null) {
+            return false;
+        }
+        discoveryActive = false;
+        if (!hasBluetoothScanPermission()) {
+            // Sem a permissão nunca houve descoberta ativa para cancelar.
             return false;
         }
         try {
@@ -317,14 +367,23 @@ public class MainActivity extends FlutterActivity {
         }
         try {
             String address = device.getAddress();
-            if (address == null || !discoveredAddresses.add(address)) {
+            if (address == null) {
                 return;
             }
-            String name = device.getName();
+            String reported = device.getName();
+            String name = reported == null || reported.trim().isEmpty()
+                    ? UNKNOWN_DEVICE_NAME
+                    : reported.trim();
+            // O Android costuma anunciar o aparelho sem nome e só resolvê-lo no
+            // anúncio seguinte: repetimos o envio quando o nome real aparece.
+            String previous = discoveredDevices.get(address);
+            if (previous != null
+                    && (previous.equals(name) || UNKNOWN_DEVICE_NAME.equals(name))) {
+                return;
+            }
+            discoveredDevices.put(address, name);
             Map<String, Object> payload = new HashMap<>();
-            payload.put("name", name == null || name.trim().isEmpty()
-                    ? "Dispositivo Bluetooth"
-                    : name);
+            payload.put("name", name);
             payload.put("address", address);
             payload.put("bonded", bonded
                     || device.getBondState() == BluetoothDevice.BOND_BONDED);
@@ -483,7 +542,12 @@ public class MainActivity extends FlutterActivity {
             public void onChecksumFail(byte[] payload, int length, int checksum) {
                 if (isActiveGeneration(generation)) {
                     noteDroppedRawSample();
-                    sendErrorToDart("Pacote de EEG descartado por falha de integridade.");
+                    // Com contato ruim isto dispara dezenas de vezes por segundo.
+                    long now = System.currentTimeMillis();
+                    if (now - lastChecksumErrorAt >= CHECKSUM_ERROR_INTERVAL_MILLIS) {
+                        lastChecksumErrorAt = now;
+                        sendErrorToDart("Sinal instável: pacotes de EEG descartados.");
+                    }
                 }
             }
         };
@@ -714,6 +778,21 @@ public class MainActivity extends FlutterActivity {
                 || connectionState == ConnectionStates.STATE_FAILED
                 || connectionState == ConnectionStates.STATE_ERROR
                 || connectionState == ConnectionStates.STATE_GET_DATA_TIME_OUT;
+    }
+
+    private boolean hasLocationPermission() {
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    /** A descoberta clássica exige o serviço de localização ligado desde o Android 6. */
+    private boolean isLocationServiceEnabled() {
+        LocationManager manager = getSystemService(LocationManager.class);
+        if (manager == null) {
+            return true;
+        }
+        return manager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+                || manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
     }
 
     private boolean hasBluetoothScanPermission() {

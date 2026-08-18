@@ -43,6 +43,9 @@ class NativeBrainLinkGateway implements DeviceDiscoveryGateway {
     final devices = <String, ConnectableDevice>{};
     final finished = Completer<void>();
     var scanStarted = false;
+    String? nativeError;
+    final errorSubscription =
+        bridge.errorStream.listen((message) => nativeError ??= message);
     final deviceSubscription = bridge.deviceStream.listen((device) {
       if (device.address.isEmpty) return;
       devices[device.address] = ConnectableDevice(
@@ -59,37 +62,56 @@ class NativeBrainLinkGateway implements DeviceDiscoveryGateway {
       }
     });
     try {
-      final started = await bridge.startScan();
-      if (!started) throw StateError('A busca Bluetooth não foi iniciada.');
+      // A varredura ativa pode falhar (Bluetooth desligado, permissão negada),
+      // mas os aparelhos já pareados foram emitidos antes dela: mantemos o
+      // resultado em vez de descartá-lo com uma exceção. O limite de tempo
+      // cobre o diálogo de permissão que nunca devolve resposta ao canal.
+      final started = await bridge
+          .startScan()
+          .timeout(const Duration(seconds: 60), onTimeout: () => false);
       await Future.any<void>([
         finished.future,
-        Future<void>.delayed(const Duration(seconds: 8)),
+        Future<void>.delayed(
+          // A varredura clássica do Android leva cerca de doze segundos.
+          started ? const Duration(seconds: 13) : const Duration(seconds: 1),
+        ),
       ]);
       final result = devices.values.toList()
         ..sort((a, b) {
           if (a.isPaired != b.isPaired) return a.isPaired ? -1 : 1;
           return a.name.compareTo(b.name);
         });
+      if (result.isEmpty && nativeError != null) {
+        throw StateError(nativeError!);
+      }
       return result;
     } finally {
       await bridge.stopScan();
       await deviceSubscription.cancel();
       await scanSubscription.cancel();
+      await errorSubscription.cancel();
     }
   }
 
   @override
   Future<void> connect(ConnectableDevice device) async {
     final connected = Completer<void>();
+    // O erro do canal pode chegar antes do await abaixo; sem este ouvinte ele
+    // vira uma exceção assíncrona não tratada e a causa real se perde.
+    unawaited(connected.future.catchError((Object _) {}));
+    String? nativeError;
     final connectionSubscription = bridge.connectionStateStream.listen((value) {
       if (value && !connected.isCompleted) connected.complete();
     });
     final errorSubscription = bridge.errorStream.listen((message) {
+      nativeError ??= message;
       if (!connected.isCompleted) connected.completeError(StateError(message));
     });
     try {
       final started = await bridge.connect(device.id);
-      if (!started) throw StateError('A conexão Bluetooth não foi iniciada.');
+      if (!started) {
+        throw StateError(nativeError ?? 'A conexão Bluetooth não foi iniciada.');
+      }
       await connected.future.timeout(const Duration(seconds: 12));
     } finally {
       await connectionSubscription.cancel();
@@ -295,7 +317,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _scan() async {
-    if (_scanning) return;
+    // A descoberta atrapalha a negociação RFCOMM: nunca durante uma conexão.
+    if (_scanning || _connecting) return;
     setState(() {
       _scanning = true;
       _devices = const [];
@@ -311,9 +334,11 @@ class _HomeScreenState extends State<HomeScreen> {
               'Nenhum BrainLink encontrado. Pareie-o nas configurações do Android e toque em Buscar novamente.';
         }
       });
-    } on Object {
+    } on Object catch (error) {
       if (mounted) {
-        setState(() => _connectionMessage =
+        // O Android costuma explicar melhor a falha do que uma frase genérica.
+        final detail = error is StateError ? error.message : null;
+        setState(() => _connectionMessage = detail ??
             'Não foi possível buscar agora. Confira Bluetooth e permissões.');
       }
     } finally {
@@ -322,7 +347,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _connect(ConnectableDevice device) async {
-    if (_connecting) return;
+    if (_connecting || _scanning) return;
     setState(() {
       _connecting = true;
       _connectionMessage = 'Conectando a ${device.name}…';
@@ -335,9 +360,10 @@ class _HomeScreenState extends State<HomeScreen> {
         _connectionMessage = 'BrainLink conectado.';
         _step = CollectionStep.instructions;
       });
-    } on Object {
+    } on Object catch (error) {
       if (mounted) {
-        setState(() => _connectionMessage =
+        final detail = error is StateError ? error.message : null;
+        setState(() => _connectionMessage = detail ??
             'A conexão não terminou. Desligue outros apps ligados ao BrainLink e tente novamente.');
       }
     } finally {
@@ -678,7 +704,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         const SizedBox(height: 10),
         OutlinedButton.icon(
-          onPressed: _scanning ? null : _openHardware,
+          onPressed: _scanning || _connecting ? null : _openHardware,
           icon: const Icon(Icons.bluetooth_searching_rounded),
           label: const Text('Conectar BrainLink'),
         ),
@@ -708,7 +734,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 TextButton.icon(
-                  onPressed: _scanning ? null : _scan,
+                  onPressed: _scanning || _connecting ? null : _scan,
                   icon: _scanning
                       ? const SizedBox.square(
                           dimension: 14,
@@ -755,7 +781,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     FilledButton(
-                      onPressed: _connecting ? null : () => _connect(device),
+                      onPressed: _connecting || _scanning
+                          ? null
+                          : () => _connect(device),
                       child: Text(_connecting ? 'Aguarde' : 'Conectar'),
                     ),
                   ],
