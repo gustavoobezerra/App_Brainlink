@@ -51,7 +51,7 @@ class BrainLinkBridge {
 
   Stream<bool> get scanStateStream => _scanStateController.stream;
 
-  /// EEG bruto a 128 Hz, agrupado em lotes de um segundo pela camada Android.
+  /// EEG bruto a 512 Hz, agrupado em lotes de um segundo pela camada Android.
   Stream<RawBatch> get rawDataStream => _rawChannel
       .receiveBroadcastStream()
       .map((event) => RawBatch.fromMap(event as Map<Object?, Object?>));

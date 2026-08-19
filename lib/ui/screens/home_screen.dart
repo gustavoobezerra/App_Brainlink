@@ -28,6 +28,10 @@ class ConnectableDevice {
   final bool isPaired;
 }
 
+/// Nomes anunciados pelo aparelho: `BrainLink_Lite` e `BrainLink_pro`.
+bool _isBrainLink(String name) =>
+    name.toLowerCase().replaceAll(RegExp(r'[\s_-]'), '').contains('brainlink');
+
 abstract interface class DeviceDiscoveryGateway {
   Future<List<ConnectableDevice>> listDevices();
 
@@ -77,8 +81,13 @@ class NativeBrainLinkGateway implements DeviceDiscoveryGateway {
           started ? const Duration(seconds: 13) : const Duration(seconds: 1),
         ),
       ]);
+      // Numa sala cheia de fones e teclados o BrainLink some no meio da
+      // lista: o nome dele decide a ordem antes do pareamento.
       final result = devices.values.toList()
         ..sort((a, b) {
+          final aIsBrainLink = _isBrainLink(a.name);
+          final bIsBrainLink = _isBrainLink(b.name);
+          if (aIsBrainLink != bIsBrainLink) return aIsBrainLink ? -1 : 1;
           if (a.isPaired != b.isPaired) return a.isPaired ? -1 : 1;
           return a.name.compareTo(b.name);
         });
@@ -465,10 +474,10 @@ class _HomeScreenState extends State<HomeScreen> {
   void _appendDemonstrationFrame() {
     _appendDemonstrationReading();
     final closed = _phase == CollectionPhase.eyesClosed;
-    final samples = Int32List(128);
+    final samples = Int32List(RawBatch.sampleRateHz);
     for (var index = 0; index < samples.length; index++) {
       final sampleIndex = _demonstrationSampleIndex + index;
-      final time = sampleIndex / 128;
+      final time = sampleIndex / RawBatch.sampleRateHz;
       final delta = 2.0 * math.sin(2 * math.pi * 2 * time);
       final theta =
           (closed ? 4.0 : 7.0) * math.sin(2 * math.pi * 6 * time + 0.3);
@@ -526,7 +535,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _eyesClosedRaw.add(batch);
     }
     _liveRawMicrovolts.addAll(batch.toMicrovolts());
-    const maximumVisibleSamples = 128 * 5;
+    const maximumVisibleSamples = RawBatch.sampleRateHz * 5;
     if (_liveRawMicrovolts.length > maximumVisibleSamples) {
       _liveRawMicrovolts.removeRange(
         0,

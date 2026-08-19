@@ -2,8 +2,8 @@ import 'dart:typed_data';
 
 /// Lote de amostras de EEG bruto vindo da camada nativa.
 ///
-/// O SDK entrega uma amostra por vez, a 128 Hz. Enviar cada uma pelo canal
-/// seria 128 mensagens por segundo de serialização desperdiçada; o lado Android
+/// O SDK entrega uma amostra por vez, a 512 Hz. Enviar cada uma pelo canal
+/// seria 512 mensagens por segundo de serialização desperdiçada; o lado Android
 /// acumula e envia em lotes de 1 segundo.
 class RawBatch {
   const RawBatch({
@@ -37,6 +37,14 @@ class RawBatch {
 
   /// Contagens do conversor, sem conversão de unidade.
   final Int32List samples;
+
+  /// Taxa do EEG bruto, em hertz.
+  ///
+  /// O chip TGAM do BrainLink Lite amostra a 512 Hz e é isso que governa o
+  /// eixo de frequência da análise espectral: subestimar a taxa desloca
+  /// todas as bandas na mesma proporção, sem nenhum sinal de erro.
+  /// Um lote fechado carrega exatamente esta quantidade de amostras.
+  static const int sampleRateHz = 512;
 
   /// Fator de conversão do ThinkGear: `µV = raw × (1,8 / 4096) / 2000 × 1e6`.
   static const double microvoltsPerUnit = 0.2197;

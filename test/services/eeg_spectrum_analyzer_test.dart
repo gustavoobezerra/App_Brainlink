@@ -79,7 +79,7 @@ void main() {
         t0: DateTime.fromMillisecondsSinceEpoch(index * 1000),
         poorSignal: 0,
         dropped: 0,
-        samples: Int32List(128),
+        samples: Int32List(RawBatch.sampleRateHz),
       ),
     );
     final artifact = List<RawBatch>.generate(
@@ -90,7 +90,10 @@ void main() {
         poorSignal: 0,
         dropped: 0,
         samples: Int32List.fromList(
-          List<int>.generate(128, (sample) => sample == 40 ? 1400 : 0),
+          List<int>.generate(
+            RawBatch.sampleRateHz,
+            (sample) => sample == 40 ? 1400 : 0,
+          ),
         ),
       ),
     );
@@ -137,11 +140,13 @@ List<RawBatch> _sineBatches(
   double amplitudeMicrovolts = 20,
 }) {
   return List<RawBatch>.generate(count, (batchIndex) {
-    final samples = Int32List(128);
+    final samples = Int32List(RawBatch.sampleRateHz);
     for (var index = 0; index < samples.length; index++) {
-      final sampleIndex = batchIndex * 128 + index;
+      final sampleIndex = batchIndex * RawBatch.sampleRateHz + index;
       final microvolts = amplitudeMicrovolts *
-          math.sin(2 * math.pi * frequency * sampleIndex / 128);
+          math.sin(
+            2 * math.pi * frequency * sampleIndex / RawBatch.sampleRateHz,
+          );
       samples[index] = (microvolts / RawBatch.microvoltsPerUnit).round();
     }
     return RawBatch(

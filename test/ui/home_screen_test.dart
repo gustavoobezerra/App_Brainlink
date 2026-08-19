@@ -353,11 +353,13 @@ RawBatch _sineBatch(
   required double frequency,
   double amplitudeMicrovolts = 20,
 }) {
-  final samples = Int32List(128);
+  final samples = Int32List(RawBatch.sampleRateHz);
   for (var index = 0; index < samples.length; index++) {
     final absoluteIndex = sequence * samples.length + index;
     final microvolts = amplitudeMicrovolts *
-        math.sin(2 * math.pi * frequency * absoluteIndex / 128);
+        math.sin(
+          2 * math.pi * frequency * absoluteIndex / RawBatch.sampleRateHz,
+        );
     samples[index] = (microvolts / RawBatch.microvoltsPerUnit).round();
   }
   return RawBatch(

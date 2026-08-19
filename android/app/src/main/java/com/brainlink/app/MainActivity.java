@@ -43,7 +43,10 @@ public class MainActivity extends FlutterActivity {
     private static final String METHOD_CHANNEL = "com.brainlink.app/sdk";
     private static final String RAW_EVENT_CHANNEL = "com.brainlink.app/raw";
     private static final int BLUETOOTH_PERMISSION_REQUEST = 4102;
-    private static final int RAW_BATCH_SIZE = 128;
+    // O TGAM do BrainLink Lite entrega 512 amostras por segundo: com 128 o
+    // lote fechava a cada 250 ms e o Dart o tratava como um segundo, o que
+    // comprimia o eixo de tempo e deslocava todo o espectro.
+    private static final int RAW_BATCH_SIZE = 512;
     private static final int DATA_TIMEOUT_MILLIS = 5000;
     private static final int CHECKSUM_ERROR_INTERVAL_MILLIS = 3000;
     private static final String UNKNOWN_DEVICE_NAME = "Dispositivo Bluetooth";
@@ -506,8 +509,9 @@ public class MainActivity extends FlutterActivity {
                     // Sem isto o Dart só descobre a falha pelo tempo limite de
                     // doze segundos, e sem saber a causa.
                     sendErrorToDart(
-                            "O BrainLink recusou a conexão. Confirme que ele está ligado, "
-                                    + "com carga e fora de outro aparelho, e toque em Conectar de novo."
+                            "O BrainLink recusou a conexão. Ele aceita um aparelho por vez: "
+                                    + "desligue o Bluetooth do outro celular ou feche o app oficial, "
+                                    + "confirme que ele está ligado e com carga, e toque em Conectar de novo."
                     );
                 }
             }

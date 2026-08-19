@@ -134,16 +134,16 @@ class EegSpectrumAnalysis {
   }
 }
 
-/// Análise descritiva de potência espectral do EEG bruto a 128 Hz.
+/// Análise descritiva de potência espectral do EEG bruto a 512 Hz.
 ///
 /// O pipeline rejeita trechos com contato ruim, perdas, saturação, amplitude
 /// excessiva ou sinal plano. Ele não calcula probabilidade ou possibilidade de
 /// TDAH: essa finalidade pertence exclusivamente ao rastreio ASRS.
 class EegSpectrumAnalyzer {
   const EegSpectrumAnalyzer({
-    this.sampleRateHz = 128,
-    this.epochSamples = 128,
-    this.hopSamples = 64,
+    this.sampleRateHz = RawBatch.sampleRateHz,
+    this.epochSamples = RawBatch.sampleRateHz,
+    this.hopSamples = RawBatch.sampleRateHz ~/ 2,
     this.maximumPoorSignal = 50,
     this.maximumAbsoluteMicrovolts = 150,
     this.maximumPeakToPeakMicrovolts = 200,
