@@ -99,20 +99,10 @@ class TelaSensor extends StatelessWidget {
                   child: ColunaTeste(
                     espaco: 8,
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'PESQUISADOR · SINAL AO VIVO',
-                              style: estiloMono,
-                            ),
-                          ),
-                          if (simulada) ...[
-                            const SeloSimulado(compacto: true),
-                            const SizedBox(width: 8),
-                          ],
-                          Text(rotuloSinal, style: estiloMono),
-                        ],
+                      _LinhaPesquisador(
+                        estilo: estiloMono,
+                        rotulo: rotuloSinal,
+                        simulada: simulada,
                       ),
                       TracadoSinal(microvolts: tracado),
                     ],
@@ -218,6 +208,74 @@ class _FiguraSensor extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Linha "PESQUISADOR · SINAL AO VIVO" + estado, como o `display: flex;
+/// justify-content: space-between` do design: quando não cabem, os dois
+/// lados encolhem na proporção da largura natural e quebram linha.
+class _LinhaPesquisador extends StatelessWidget {
+  const _LinhaPesquisador({
+    required this.estilo,
+    required this.rotulo,
+    required this.simulada,
+  });
+
+  static const String _titulo = 'PESQUISADOR · SINAL AO VIVO';
+  static const double _espacoSelo = 8;
+
+  final TextStyle estilo;
+  final String rotulo;
+  final bool simulada;
+
+  @override
+  Widget build(BuildContext context) {
+    final escala = MediaQuery.textScalerOf(context);
+    double natural(String texto, TextStyle estilo) {
+      final pintor = TextPainter(
+        text: TextSpan(text: texto, style: estilo),
+        textDirection: TextDirection.ltr,
+        textScaler: escala,
+      )..layout();
+      final largura = pintor.width;
+      pintor.dispose();
+      return largura;
+    }
+
+    final larguraSelo = simulada
+        ? natural(
+              'SIMULADO',
+              TipografiaTeste.mono(
+                12,
+                cor: TemaTeste.of(context).ambarTitulo,
+                espacamentoEm: 0.04,
+              ),
+            ) +
+            _espacoSelo
+        : 0.0;
+    int fator(double largura) => (largura * 10).round().clamp(1, 1 << 30);
+    final direita = Text(rotulo, style: estilo);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Flexible(
+          flex: fator(natural(_titulo, estilo)),
+          child: Text(_titulo, style: estilo),
+        ),
+        Flexible(
+          flex: fator(natural(rotulo, estilo) + larguraSelo),
+          child: simulada
+              // Quebra entre o selo e o rótulo, nunca no meio da palavra.
+              ? Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: _espacoSelo,
+                  children: [const SeloSimulado(compacto: true), direita],
+                )
+              : direita,
+        ),
+      ],
     );
   }
 }

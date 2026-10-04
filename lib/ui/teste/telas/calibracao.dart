@@ -42,7 +42,9 @@ class TelaCalibracao extends StatelessWidget {
             final cores = TemaTeste.of(context);
             final total = totalBipes < 1 ? 1 : totalBipes;
             final tocados = bipesTocados.clamp(0, total);
-            final diametro = 100 + 48 * (tocados / total);
+            // 100 px antes do primeiro bipe e +16 px por bipe: 148 px em 3 de 5,
+            // como no design.
+            final diametro = 100 + 80 * (tocados / total);
             final estiloMono = TipografiaTeste.mono(
               12,
               cor: cores.textoApagado,

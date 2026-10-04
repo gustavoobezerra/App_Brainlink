@@ -299,8 +299,7 @@ class _FluxoTesteScreenState extends State<FluxoTesteScreen>
           aoCafeina: c.definirCafeina,
           aoMedicacao: c.definirMedicacao,
           aoLente: c.definirLente,
-          aoConcluir:
-              c.contexto.completas ? c.concluirQuestionarios : null,
+          aoConcluir: c.contexto.completas ? c.concluirQuestionarios : null,
         );
       case EtapaTeste.fimPesquisa:
         return TelaFimPesquisa(

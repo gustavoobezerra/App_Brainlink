@@ -391,6 +391,43 @@ class TemaTeste extends StatelessWidget {
   /// Substitui o brilho do sistema; usado em testes e capturas.
   final Brightness? brilhoForcado;
 
+  /// `line-height: normal` desta fonte no navegador (o design usa esse
+  /// valor sempre que não define outro).
+  static const double alturaNormal = 1.3;
+
+  /// Os estilos do Material (altura 1,43 e espaçamento 0,25 no `bodyMedium`)
+  /// vazam para todo `Text` sem estilo próprio dentro de um `Material`;
+  /// trocamos pela métrica do navegador.
+  static ThemeData _comTextoCss(ThemeData base, CoresTeste cores) {
+    TextStyle? ajustar(TextStyle? estilo) => estilo?.copyWith(
+          fontFamily: FontesTeste.next,
+          height: alturaNormal,
+          letterSpacing: 0,
+          leadingDistribution: TextLeadingDistribution.even,
+          color: cores.texto,
+        );
+    final t = base.textTheme;
+    return base.copyWith(
+      textTheme: t.copyWith(
+        displayLarge: ajustar(t.displayLarge),
+        displayMedium: ajustar(t.displayMedium),
+        displaySmall: ajustar(t.displaySmall),
+        headlineLarge: ajustar(t.headlineLarge),
+        headlineMedium: ajustar(t.headlineMedium),
+        headlineSmall: ajustar(t.headlineSmall),
+        titleLarge: ajustar(t.titleLarge),
+        titleMedium: ajustar(t.titleMedium),
+        titleSmall: ajustar(t.titleSmall),
+        bodyLarge: ajustar(t.bodyLarge),
+        bodyMedium: ajustar(t.bodyMedium),
+        bodySmall: ajustar(t.bodySmall),
+        labelLarge: ajustar(t.labelLarge),
+        labelMedium: ajustar(t.labelMedium),
+        labelSmall: ajustar(t.labelSmall),
+      ),
+    );
+  }
+
   static CoresTeste of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<_EscopoCores>()?.cores ??
       CoresTeste.escuroPadrao;
@@ -419,25 +456,33 @@ class TemaTeste extends StatelessWidget {
       child: AnnotatedRegion<SystemUiOverlayStyle>(
         value: barras,
         child: Theme(
-          data: ThemeData(
-            useMaterial3: true,
-            brightness: brilho,
-            fontFamily: FontesTeste.next,
-            scaffoldBackgroundColor: cores.fundo,
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: cores.acento,
-              brightness: brilho,
-              surface: cores.cartao,
-              primary: cores.primario,
-            ),
-            textSelectionTheme: TextSelectionThemeData(
-              cursorColor: cores.acento,
-              selectionColor: cores.acento.withValues(alpha: 0.35),
-              selectionHandleColor: cores.acento,
-            ),
-          ),
+          data: _comTextoCss(
+              ThemeData(
+                useMaterial3: true,
+                brightness: brilho,
+                fontFamily: FontesTeste.next,
+                scaffoldBackgroundColor: cores.fundo,
+                colorScheme: ColorScheme.fromSeed(
+                  seedColor: cores.acento,
+                  brightness: brilho,
+                  surface: cores.cartao,
+                  primary: cores.primario,
+                ),
+                textSelectionTheme: TextSelectionThemeData(
+                  cursorColor: cores.acento,
+                  selectionColor: cores.acento.withValues(alpha: 0.35),
+                  selectionHandleColor: cores.acento,
+                ),
+              ),
+              cores),
           child: DefaultTextStyle.merge(
-            style: TextStyle(fontFamily: FontesTeste.next, color: cores.texto),
+            style: TextStyle(
+              fontFamily: FontesTeste.next,
+              color: cores.texto,
+              height: alturaNormal,
+              letterSpacing: 0,
+              leadingDistribution: TextLeadingDistribution.even,
+            ),
             child: child,
           ),
         ),

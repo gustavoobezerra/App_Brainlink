@@ -76,6 +76,7 @@ class TelaCalibracaoResultado extends StatelessWidget {
                       tamanhoIcone: 18,
                       espacoIcone: 8,
                       preenchimentoHorizontal: 4,
+                      alinhamento: MainAxisAlignment.start,
                     ),
                   ),
                 ),
