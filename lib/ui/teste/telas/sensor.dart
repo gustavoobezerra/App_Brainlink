@@ -41,7 +41,7 @@ class TelaSensor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => TemaTeste(
-        child: Builder(
+        child: _TextoCss(child: Builder(
           builder: (context) {
             final cores = TemaTeste.of(context);
             final segundos = segundosEstaveis.clamp(0, 10);
@@ -93,56 +93,7 @@ class TelaSensor extends StatelessWidget {
                     ),
                   ),
                 ),
-                CartaoTeste(
-                  padding: const EdgeInsets.all(16),
-                  child: LinhaTeste(
-                    espaco: 16,
-                    children: [
-                      IconeSvg(
-                        IconesTeste.cabecaSensor(cores),
-                        largura: 132,
-                        altura: 124,
-                      ),
-                      Expanded(
-                        child: ColunaTeste(
-                          espaco: 12,
-                          children: [
-                            Text.rich(
-                              TextSpan(
-                                children: [
-                                  TextSpan(
-                                    text: 'Sensor na testa',
-                                    style: TipografiaTeste.next(
-                                      16,
-                                      peso: FontWeight.w700,
-                                    ),
-                                  ),
-                                  const TextSpan(
-                                    text: ', sem cabelo entre o sensor e a '
-                                        'pele.',
-                                  ),
-                                ],
-                              ),
-                              style: TipografiaTeste.next(
-                                16,
-                                altura: 1.35,
-                                cor: cores.texto,
-                              ),
-                            ),
-                            Text(
-                              'Clipe na orelha, se o seu headset tiver.',
-                              style: TipografiaTeste.next(
-                                16,
-                                altura: 1.35,
-                                cor: cores.textoSuave,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                const _FiguraSensor(),
                 cartao,
                 QuadroPesquisador(
                   child: ColunaTeste(
@@ -172,6 +123,101 @@ class TelaSensor extends StatelessWidget {
               ],
             );
           },
-        ),
+        )),
       );
+}
+
+/// O `line-height: normal` do navegador vale 1,3 nesta fonte, sem
+/// espaçamento extra; o tema do Material herdaria 1,43 e 0,25 do
+/// `bodyMedium`. Fixa os valores do CSS, com a entrelinha dividida igualmente.
+class _TextoCss extends StatelessWidget {
+  const _TextoCss({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context);
+    const css = TextStyle(
+      height: 1.3,
+      letterSpacing: 0,
+      leadingDistribution: TextLeadingDistribution.even,
+    );
+    final corpo = (tema.textTheme.bodyMedium ?? const TextStyle()).merge(css);
+    return Theme(
+      data: tema.copyWith(
+        textTheme: tema.textTheme.copyWith(bodyMedium: corpo),
+      ),
+      child: DefaultTextStyle.merge(style: css, child: child),
+    );
+  }
+}
+
+/// Figura "Sensor na testa" com a legenda ao lado.
+///
+/// No design a figura de 132 px encolhe junto com a legenda (`flex-shrink`
+/// do CSS, proporcional à largura natural de cada uma); aqui os fatores de
+/// [Flexible] reproduzem essa divisão.
+class _FiguraSensor extends StatelessWidget {
+  const _FiguraSensor();
+
+  static const double _larguraFigura = 132;
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = TemaTeste.of(context);
+    final base = TipografiaTeste.next(16, altura: 1.35, cor: cores.texto)
+        .copyWith(leadingDistribution: TextLeadingDistribution.even);
+    final legenda1 = TextSpan(
+      style: base,
+      children: [
+        TextSpan(
+          text: 'Sensor na testa',
+          style: TipografiaTeste.next(16, peso: FontWeight.w700),
+        ),
+        const TextSpan(text: ', sem cabelo entre o sensor e a pele.'),
+      ],
+    );
+    final legenda2 = TextSpan(
+      text: 'Clipe na orelha, se o seu headset tiver.',
+      style: base.copyWith(color: cores.textoSuave),
+    );
+    final escala = MediaQuery.textScalerOf(context);
+    double natural(InlineSpan texto) {
+      final pintor = TextPainter(
+        text: texto,
+        textDirection: TextDirection.ltr,
+        textScaler: escala,
+      )..layout();
+      final largura = pintor.width;
+      pintor.dispose();
+      return largura;
+    }
+
+    final larguraLegenda =
+        [natural(legenda1), natural(legenda2)].reduce((a, b) => a > b ? a : b);
+    return CartaoTeste(
+      padding: const EdgeInsets.all(16),
+      child: LinhaTeste(
+        espaco: 16,
+        children: [
+          Flexible(
+            flex: (_larguraFigura * 10).round(),
+            child: IconeSvg(
+              IconesTeste.cabecaSensor(cores),
+              largura: _larguraFigura,
+              altura: 124,
+            ),
+          ),
+          Flexible(
+            flex: (larguraLegenda * 10).round().clamp(1, 1 << 30),
+            child: ColunaTeste(
+              espaco: 12,
+              children: [Text.rich(legenda1), Text.rich(legenda2)],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

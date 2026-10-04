@@ -60,19 +60,6 @@ Future<void> _pequenaSemEstouro(WidgetTester tester, Widget tela) async {
 }
 
 void main() {
-  testWidgets('TEMP metrica', (tester) async {
-    await montarTela(tester, const SizedBox());
-    final tp = TextPainter(text: const TextSpan(text: 'Ag', style: TextStyle(fontFamily: 'Atkinson Hyperlegible Next', fontSize: 100)), textDirection: TextDirection.ltr)..layout();
-    // ignore: avoid_print
-    print('METRICA ${tp.height} ${tp.computeDistanceToActualBaseline(TextBaseline.alphabetic)}');
-    await montarTela(tester, TelaInstrucoesTarefa(versao: VersaoTeste.auditiva, aoOuvirExemplo: (_) {}, aoFazerTreino: () {}));
-    for (final t in ['Toque na tela', 'Instruções da tarefa']) {
-      // ignore: avoid_print
-      print('METRICA $t ${tester.getRect(find.text(t))}');
-    }
-    // ignore: avoid_print
-    print('METRICA sg ${tester.getRect(find.text('Som grave').last)}');
-  });
   group('Repouso', () {
     testWidgets('início (etapa 3)', (tester) async {
       var comecou = 0;
@@ -147,7 +134,10 @@ void main() {
         simulada: false,
         aoSegurarEncerrar: () => encerrou++,
       );
+      // Com sombras reais, para a captura mostrar o brilho do ponto.
+      debugDisableShadows = false;
       await capturarTela(tester, tela, 'Repouso-olhos-fechados');
+      debugDisableShadows = true;
       expect(find.text('0:42'), findsOneWidget);
       expect(find.text('SIMULADO'), findsNothing);
       final gesto = await tester
@@ -542,6 +532,3 @@ void main() {
     });
   });
 }
-
-// TEMP-METRICA
-void mainMetrica() {}

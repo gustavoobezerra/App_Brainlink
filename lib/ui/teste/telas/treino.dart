@@ -52,22 +52,26 @@ class TelaTreino extends StatelessWidget {
         child: Builder(
           builder: (context) {
             final cores = TemaTeste.of(context);
-            return PaginaTeste(
-              espaco: 20,
-              children: [
-                CabecalhoEtapa(
-                  etapa: 4,
-                  rotulo: 'Treino',
-                  rotuloDireita: concluido
-                      ? '$total de $total'
-                      : '${_auditiva ? 'Som' : 'Figura'} $indice de $total',
-                ),
-                if (concluido) ...[
-                  Expanded(child: _fim(cores)),
-                  BotaoTeste(texto: 'Começar o teste', aoTocar: aoComecarTeste),
-                ] else
-                  Expanded(child: _area(cores)),
-              ],
+            return _alturaNormal(
+              context,
+              PaginaTeste(
+                espaco: 20,
+                children: [
+                  CabecalhoEtapa(
+                    etapa: 4,
+                    rotulo: 'Treino',
+                    rotuloDireita: concluido
+                        ? '$total de $total'
+                        : '${_auditiva ? 'Som' : 'Figura'} $indice de $total',
+                  ),
+                  if (concluido) ...[
+                    Expanded(child: _fim(cores)),
+                    BotaoTeste(
+                        texto: 'Começar o teste', aoTocar: aoComecarTeste),
+                  ] else
+                    Expanded(child: _area(cores)),
+                ],
+              ),
             );
           },
         ),
@@ -291,4 +295,29 @@ class _BordaTracejada extends CustomPainter {
 
   @override
   bool shouldRepaint(_BordaTracejada oldDelegate) => oldDelegate.cor != cor;
+}
+
+/// O `line-height: normal` do navegador vale 1,3 nesta fonte; o tema do
+/// Material herda 1,43 do `bodyMedium`, então a tela fixa 1,3 como padrão,
+/// com a sobra da entrelinha dividida igualmente (como no CSS).
+Widget _alturaNormal(BuildContext context, Widget filho) {
+  final tema = Theme.of(context);
+  final corpo = tema.textTheme.bodyMedium ?? const TextStyle();
+  return Theme(
+    data: tema.copyWith(
+      textTheme: tema.textTheme.copyWith(
+        bodyMedium: corpo.copyWith(
+          height: 1.3,
+          leadingDistribution: TextLeadingDistribution.even,
+        ),
+      ),
+    ),
+    child: DefaultTextStyle.merge(
+      style: const TextStyle(
+        height: 1.3,
+        leadingDistribution: TextLeadingDistribution.even,
+      ),
+      child: filho,
+    ),
+  );
 }

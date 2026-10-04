@@ -49,64 +49,67 @@ class TelaTarefa extends StatelessWidget {
                 auditiva ? CoresFase.auditivaFundo : CoresFase.visualFundo;
             final corTexto =
                 auditiva ? CoresFase.auditivaTexto : CoresFase.visualTexto;
-            return Material(
-              color: fundo,
-              child: AreaToque(
-                aoTocar: aoTocar,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    if (auditiva)
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        top: 48 + insets.top,
-                        child: ExcludeSemantics(
-                          child: Text(
-                            ritmo
-                                ? 'OLHOS FECHADOS · TOQUE EM TODOS OS SONS'
-                                : 'OLHOS FECHADOS · TOQUE NO SOM GRAVE',
-                            textAlign: TextAlign.center,
-                            style: TipografiaTeste.next(
-                              13,
-                              cor: CoresFase.auditivaRotulo,
-                              espacamento: 13 * 0.06,
+            return _alturaNormal(
+              context,
+              Material(
+                color: fundo,
+                child: AreaToque(
+                  aoTocar: aoTocar,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (auditiva)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          top: 48 + insets.top,
+                          child: ExcludeSemantics(
+                            child: Text(
+                              ritmo
+                                  ? 'OLHOS FECHADOS · TOQUE EM TODOS OS SONS'
+                                  : 'OLHOS FECHADOS · TOQUE NO SOM GRAVE',
+                              textAlign: TextAlign.center,
+                              style: TipografiaTeste.next(
+                                13,
+                                cor: CoresFase.auditivaRotulo,
+                                espacamento: 13 * 0.06,
+                              ),
                             ),
                           ),
-                        ),
-                      )
-                    else
-                      Center(child: _estimulo()),
-                    Positioned(
-                      left: 20 + insets.left,
-                      bottom: 24 + insets.bottom,
-                      child: CantoPesquisador(
-                        restante: restante,
-                        qualidade: qualidade,
-                        cor: corTexto,
-                        toques: toques,
-                        simulada: simulada,
-                        espaco: 12,
-                      ),
-                    ),
-                    Positioned(
-                      right: 16 + insets.right,
-                      bottom: 12 + insets.bottom,
-                      child: Semantics(
-                        container: true,
-                        child: BotaoSegurar.canto(
-                          aoConcluir: aoSegurarEncerrar,
-                          corBorda: auditiva
-                              ? CoresFase.auditivaSegurarBorda
-                              : CoresFase.visualSegurarBorda,
-                          corIcone: auditiva
-                              ? CoresFase.auditivaSegurarIcone
-                              : CoresFase.visualSegurarIcone,
-                          fundo: fundo,
+                        )
+                      else
+                        Center(child: _estimulo()),
+                      Positioned(
+                        left: 20 + insets.left,
+                        bottom: 24 + insets.bottom,
+                        child: CantoPesquisador(
+                          restante: restante,
+                          qualidade: qualidade,
+                          cor: corTexto,
+                          toques: toques,
+                          simulada: simulada,
+                          espaco: 12,
                         ),
                       ),
-                    ),
-                  ],
+                      Positioned(
+                        right: 16 + insets.right,
+                        bottom: 12 + insets.bottom,
+                        child: Semantics(
+                          container: true,
+                          child: BotaoSegurar.canto(
+                            aoConcluir: aoSegurarEncerrar,
+                            corBorda: auditiva
+                                ? CoresFase.auditivaSegurarBorda
+                                : CoresFase.visualSegurarBorda,
+                            corIcone: auditiva
+                                ? CoresFase.auditivaSegurarIcone
+                                : CoresFase.visualSegurarIcone,
+                            fundo: fundo,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -137,4 +140,29 @@ class TelaTarefa extends StatelessWidget {
       ),
     );
   }
+}
+
+/// O `line-height: normal` do navegador vale 1,3 nesta fonte; o tema do
+/// Material herda 1,43 do `bodyMedium`, então a tela fixa 1,3 como padrão,
+/// com a sobra da entrelinha dividida igualmente (como no CSS).
+Widget _alturaNormal(BuildContext context, Widget filho) {
+  final tema = Theme.of(context);
+  final corpo = tema.textTheme.bodyMedium ?? const TextStyle();
+  return Theme(
+    data: tema.copyWith(
+      textTheme: tema.textTheme.copyWith(
+        bodyMedium: corpo.copyWith(
+          height: 1.3,
+          leadingDistribution: TextLeadingDistribution.even,
+        ),
+      ),
+    ),
+    child: DefaultTextStyle.merge(
+      style: const TextStyle(
+        height: 1.3,
+        leadingDistribution: TextLeadingDistribution.even,
+      ),
+      child: filho,
+    ),
+  );
 }
