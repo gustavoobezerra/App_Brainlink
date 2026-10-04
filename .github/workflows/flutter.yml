@@ -20,7 +20,7 @@ jobs:
       - name: Configure Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: '3.47.4'
           cache: true
 
       - name: Install dependencies
@@ -35,5 +35,5 @@ jobs:
       - name: Test
         run: flutter test
 
-      - name: Build demonstration APK
-        run: flutter build apk --debug
+      - name: Build release-mode APK for internal validation
+        run: flutter build apk --release

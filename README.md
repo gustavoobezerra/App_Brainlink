@@ -40,6 +40,12 @@ Resultados separados → exportar ou repetir
   final, mostra delta, theta, alfa e beta apenas quando há trechos limpos
   suficientes; contato ruim, perdas, sinal plano e amplitudes compatíveis com
   artefato invalidam os trechos.
+- Antes de começar no hardware, o contato precisa permanecer estável. Uma
+  desconexão, saída do app ou encerramento antecipado invalida a sessão e não
+  gera resultado parcial.
+- O raw de 16 bits é esperado a 512 amostras/s e agrupado em lotes de um
+  segundo. `CODE_RAW = 128` é o código decimal do evento `0x80`, não a taxa; a
+  cadência real é medida no Android e desvios grandes invalidam as épocas.
 - As bandas descrevem somente esta sessão e não classificam TDAH.
 - O app informa condicionalmente se theta ficou maior que beta nas duas etapas,
   o padrão histórico mais pesquisado. Esse estado é descritivo: estudos atuais
@@ -83,9 +89,9 @@ Resultados separados → exportar ou repetir
 
 Se ainda assim falhar, toque em **Compartilhar diagnóstico** no painel de
 conexão. O arquivo gerado traz o modelo do aparelho, a versão do Android, o
-estado do Bluetooth e da localização, as permissões concedidas, os aparelhos
-pareados e a sequência de eventos da tentativa — é o que permite identificar a
-causa sem ter o aparelho em mãos.
+estado do Bluetooth e da localização, as permissões concedidas, somente os
+modelos BrainLink pareados e a sequência de eventos da tentativa. Endereços MAC
+e nomes de outros aparelhos não entram no arquivo.
 
 Se o indicador mostrar coleta ruim, limpe e seque os pontos de contato,
 reposicione o sensor e o clipe e repita. Piscadas frequentes, fala, movimento,
@@ -130,6 +136,8 @@ O APK é gerado em `build/app/outputs/flutter-apk/app-release.apk`.
 ## Privacidade e limites
 
 - não há conta, nuvem ou envio automático;
+- o backup Android do aplicativo é desativado para que relatórios de saúde não
+  sejam copiados automaticamente;
 - arquivos são criados somente quando a pessoa toca em exportar;
 - o headset possui um canal frontal sensível a contato, piscadas e movimento;
 - as potências relativas delta/theta/alfa/beta não têm corte populacional e

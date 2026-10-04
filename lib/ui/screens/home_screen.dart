@@ -16,7 +16,14 @@ import '../../services/guided_collection_report_exporter.dart';
 
 enum AcquisitionMode { demonstration, hardware }
 
-enum CollectionStep { choice, instructions, running, result, screening }
+enum CollectionStep {
+  choice,
+  instructions,
+  running,
+  interrupted,
+  result,
+  screening,
+}
 
 enum CollectionPhase { eyesOpen, eyesClosed }
 
@@ -136,22 +143,26 @@ class HomeScreen extends StatefulWidget {
     super.key,
     this.deviceGateway,
     this.rawDataStream,
+    this.connectionStateStream,
     this.demonstrationPhaseDuration = const Duration(seconds: 8),
     this.hardwarePhaseDuration = const Duration(minutes: 1),
     this.tickInterval = const Duration(seconds: 1),
+    this.signalPrecheckDuration = const Duration(seconds: 3),
   });
 
   final DeviceDiscoveryGateway? deviceGateway;
   final Stream<RawBatch>? rawDataStream;
+  final Stream<bool>? connectionStateStream;
   final Duration demonstrationPhaseDuration;
   final Duration hardwarePhaseDuration;
   final Duration tickInterval;
+  final Duration signalPrecheckDuration;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final BrainLinkBridge _bridge = BrainLinkBridge();
   final GuidedCollectionReportExporter _exporter =
       const GuidedCollectionReportExporter();
@@ -160,6 +171,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   late final DeviceDiscoveryGateway _deviceGateway;
   StreamSubscription<EEGData>? _dataSubscription;
+  StreamSubscription<int>? _signalQualitySubscription;
   StreamSubscription<RawBatch>? _rawSubscription;
   StreamSubscription<bool>? _connectionSubscription;
   StreamSubscription<String>? _errorSubscription;
@@ -172,6 +184,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Duration _phaseElapsed = Duration.zero;
   DateTime? _startedAt;
   DateTime? _endedAt;
+  DateTime? _eyesClosedStartedAt;
   final List<_Reading> _readings = [];
   final List<RawBatch> _eyesOpenRaw = [];
   final List<RawBatch> _eyesClosedRaw = [];
@@ -191,13 +204,26 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _exportMessage;
   String? _diagnosticsMessage;
   bool _sharingDiagnostics = false;
+  bool _exporting = false;
+  int? _latestSignalQuality;
+  DateTime? _signalStableSince;
+  bool? _rawCadenceCompatible;
+  String? _interruptionReason;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _deviceGateway = widget.deviceGateway ?? NativeBrainLinkGateway(_bridge);
     _connected = _bridge.isConnected;
     _dataSubscription = _bridge.eegDataStream.listen(_onHardwareData);
+    _signalQualitySubscription = _bridge.signalQualityStream.listen((quality) {
+      if (!mounted || _mode != AcquisitionMode.hardware || !_connected) return;
+      if (_latestSignalQuality != quality) {
+        _diagnostics.record('contato', '$quality/200 (menor é melhor)');
+      }
+      _updateSignalPrecheck(quality);
+    });
     _rawSubscription = (widget.rawDataStream ?? _bridge.rawDataStream).listen(
       _onHardwareRaw,
       onError: (Object _) {
@@ -206,28 +232,32 @@ class _HomeScreenState extends State<HomeScreen> {
             _step != CollectionStep.running) {
           return;
         }
-        setState(() => _connectionMessage =
-            'O fluxo de EEG bruto foi interrompido. Reconecte e repita a coleta.');
+        _interruptCollection(
+          'O fluxo de EEG bruto foi interrompido. Reconecte e repita a coleta.',
+        );
       },
     );
     _statusSubscription = _bridge.connectionStatusStream.listen(
       (status) => _diagnostics.record('estado', status),
     );
-    _connectionSubscription = _bridge.connectionStateStream.listen((connected) {
+    _connectionSubscription =
+        (widget.connectionStateStream ?? _bridge.connectionStateStream)
+            .listen((connected) {
       _diagnostics.record(
         'conexão',
         connected ? 'conectado' : 'desconectado',
       );
       if (!mounted) return;
-      setState(() {
-        _connected = connected;
-        if (!connected &&
-            _mode == AcquisitionMode.hardware &&
-            _step == CollectionStep.running) {
-          _connectionMessage =
-              'A conexão foi interrompida. Encerre a coleta e conecte novamente.';
-        }
-      });
+      if (!connected &&
+          _mode == AcquisitionMode.hardware &&
+          _step == CollectionStep.running) {
+        _connected = false;
+        _interruptCollection(
+          'A conexão foi interrompida. Esta coleta foi invalidada para não gerar um resultado incompleto.',
+        );
+        return;
+      }
+      setState(() => _connected = connected);
     });
     _errorSubscription = _bridge.errorStream.listen((message) {
       _diagnostics.record('erro', message);
@@ -238,13 +268,26 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     unawaited(_dataSubscription?.cancel());
+    unawaited(_signalQualitySubscription?.cancel());
     unawaited(_rawSubscription?.cancel());
     unawaited(_connectionSubscription?.cancel());
     unawaited(_errorSubscription?.cancel());
     unawaited(_statusSubscription?.cancel());
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed &&
+        _mode == AcquisitionMode.hardware &&
+        _step == CollectionStep.running) {
+      _interruptCollection(
+        'O aplicativo saiu do primeiro plano durante a coleta. A sessão foi invalidada para preservar a continuidade.',
+      );
+    }
   }
 
   Duration get _phaseDuration => _mode == AcquisitionMode.hardware
@@ -318,6 +361,37 @@ class _HomeScreenState extends State<HomeScreen> {
     return AsrsScreener6.score(_asrsAnswers.whereType<AsrsResponse>());
   }
 
+  bool get _signalReady {
+    if (_mode != AcquisitionMode.hardware) return true;
+    if (widget.signalPrecheckDuration == Duration.zero) return _connected;
+    if (!_connected ||
+        _rawCadenceCompatible == false ||
+        (_latestSignalQuality ?? 200) > 50) {
+      return false;
+    }
+    final stableSince = _signalStableSince;
+    return stableSince != null &&
+        DateTime.now().difference(stableSince) >= widget.signalPrecheckDuration;
+  }
+
+  String get _signalPrecheckMessage {
+    final quality = _latestSignalQuality;
+    if (!_connected) return 'Reconecte o BrainLink para verificar o contato.';
+    if (_rawCadenceCompatible == false) {
+      return 'O fluxo bruto não está chegando próximo de 512 amostras/s. Esta configuração não pode iniciar a análise.';
+    }
+    if (quality == null) {
+      return 'Verificando o contato do sensor antes de liberar a coleta…';
+    }
+    if (quality > 50) {
+      return 'Contato instável ($quality/200). Reposicione o sensor e o clipe.';
+    }
+    if (!_signalReady) {
+      return 'Contato detectado. Mantenha-se imóvel por alguns segundos…';
+    }
+    return 'Contato estável. A coleta pode começar.';
+  }
+
   void _chooseDemonstration() {
     setState(() {
       _mode = AcquisitionMode.demonstration;
@@ -384,7 +458,10 @@ class _HomeScreenState extends State<HomeScreen> {
       _connecting = true;
       _connectionMessage = 'Conectando a ${device.name}…';
     });
-    _diagnostics.record('conexão', 'tentando ${device.name} (${device.id})');
+    _diagnostics.record(
+      'conexão',
+      'tentando ${device.name} (${device.isPaired ? 'pareado' : 'novo'})',
+    );
     try {
       await _deviceGateway.connect(device);
       if (!mounted) return;
@@ -410,13 +487,20 @@ class _HomeScreenState extends State<HomeScreen> {
       _message('Conecte o BrainLink antes de iniciar.');
       return;
     }
+    if (_mode == AcquisitionMode.hardware && !_signalReady) {
+      _message(_signalPrecheckMessage);
+      return;
+    }
     _timer?.cancel();
+    final now = DateTime.now();
     setState(() {
       _step = CollectionStep.running;
       _phase = CollectionPhase.eyesOpen;
       _phaseElapsed = Duration.zero;
-      _startedAt = DateTime.now();
+      _startedAt = now;
       _endedAt = null;
+      _eyesClosedStartedAt = null;
+      _interruptionReason = null;
       _readings.clear();
       _clearRawState();
       _exportMessage = null;
@@ -438,8 +522,11 @@ class _HomeScreenState extends State<HomeScreen> {
       _phaseElapsed += widget.tickInterval;
       if (_phaseElapsed >= _phaseDuration) {
         if (_phase == CollectionPhase.eyesOpen) {
+          final now = DateTime.now();
           _phase = CollectionPhase.eyesClosed;
           _phaseElapsed = Duration.zero;
+          _eyesClosedStartedAt = now;
+          _liveRawMicrovolts.clear();
           phaseChanged = true;
         } else {
           finished = true;
@@ -499,15 +586,14 @@ class _HomeScreenState extends State<HomeScreen> {
         dropped: 0,
         samples: samples,
       ),
+      forcedPhase: _phase,
     );
   }
 
   void _onHardwareData(EEGData data) {
-    if (!mounted ||
-        _step != CollectionStep.running ||
-        _mode != AcquisitionMode.hardware) {
-      return;
-    }
+    if (!mounted || _mode != AcquisitionMode.hardware) return;
+    _updateSignalPrecheck(data.signalQuality);
+    if (_step != CollectionStep.running) return;
     setState(() {
       _readings.add(
         _Reading(
@@ -520,16 +606,76 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onHardwareRaw(RawBatch batch) {
-    if (!mounted ||
-        _step != CollectionStep.running ||
-        _mode != AcquisitionMode.hardware) {
+    if (!mounted || _mode != AcquisitionMode.hardware) return;
+    final cadenceCompatible = batch.hasExpectedCadence();
+    if (_rawCadenceCompatible != cadenceCompatible) {
+      _rawCadenceCompatible = cadenceCompatible;
+      if (_step == CollectionStep.instructions) setState(() {});
+    }
+    if (!cadenceCompatible && _step == CollectionStep.running) {
+      final observed = batch.observedSampleRateHz;
+      _interruptCollection(
+        'A cadência do EEG bruto foi incompatível com 512 amostras/s'
+        '${observed == null ? '' : ' (${observed.toStringAsFixed(1)} observadas)'}. A coleta foi invalidada.',
+      );
       return;
     }
+    _updateSignalPrecheck(batch.poorSignal);
+    if (_step != CollectionStep.running) return;
     setState(() => _recordRawBatch(batch));
   }
 
-  void _recordRawBatch(RawBatch batch) {
-    if (_phase == CollectionPhase.eyesOpen) {
+  void _updateSignalPrecheck(int? quality) {
+    if (quality == null) return;
+    final now = DateTime.now();
+    final good = quality <= 50;
+    final previous = _latestSignalQuality;
+    final previousStableSince = _signalStableSince;
+    if (good && previousStableSince == null) {
+      _signalStableSince = now;
+    } else if (!good) {
+      _signalStableSince = null;
+    }
+    _latestSignalQuality = quality;
+    if ((_step == CollectionStep.instructions ||
+            _step == CollectionStep.running) &&
+        (previous != quality ||
+            previousStableSince != _signalStableSince ||
+            (_step == CollectionStep.instructions && _signalReady))) {
+      setState(() {});
+    }
+  }
+
+  void _recordRawBatch(
+    RawBatch batch, {
+    CollectionPhase? forcedPhase,
+  }) {
+    var targetPhase = forcedPhase;
+    if (targetPhase == null) {
+      final startedAt = _startedAt;
+      if (startedAt == null || batch.samples.isEmpty) return;
+      final duration = Duration(
+        microseconds: (batch.samples.length *
+                Duration.microsecondsPerSecond /
+                RawBatch.sampleRateHz)
+            .round(),
+      );
+      final batchStartedAt = batch.t0.subtract(duration);
+      final closedStartedAt = _eyesClosedStartedAt;
+      if (closedStartedAt == null) {
+        if (batchStartedAt.isBefore(startedAt)) return;
+        targetPhase = CollectionPhase.eyesOpen;
+      } else if (!batch.t0.isAfter(closedStartedAt)) {
+        targetPhase = CollectionPhase.eyesOpen;
+      } else if (!batchStartedAt.isBefore(closedStartedAt)) {
+        targetPhase = CollectionPhase.eyesClosed;
+      } else {
+        // O lote atravessa a mudança de fase e não pertence integralmente a
+        // nenhuma condição; descartá-lo evita contaminar as duas médias.
+        return;
+      }
+    }
+    if (targetPhase == CollectionPhase.eyesOpen) {
       _eyesOpenRaw.add(batch);
     } else {
       _eyesClosedRaw.add(batch);
@@ -569,6 +715,73 @@ class _HomeScreenState extends State<HomeScreen> {
     _signalUser(strong: true);
   }
 
+  void _interruptCollection(String reason) {
+    _timer?.cancel();
+    if (!mounted) return;
+    setState(() {
+      _endedAt = DateTime.now();
+      _interruptionReason = reason;
+      _spectrumAnalysis = null;
+      _step = CollectionStep.interrupted;
+      _connectionMessage = reason;
+    });
+    _signalUser(strong: true);
+  }
+
+  Future<void> _confirmStopCollection() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Encerrar esta coleta?'),
+        content: const Text(
+          'Uma coleta encerrada antes das duas etapas completas não gera resultado. Os dados parciais serão descartados.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Continuar coleta'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Encerrar e descartar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      _interruptCollection('A coleta foi encerrada antes de ser concluída.');
+    }
+  }
+
+  Future<void> _requestReset() async {
+    if (_step == CollectionStep.choice) return;
+    final destructive =
+        _step == CollectionStep.running || _step == CollectionStep.screening;
+    if (destructive) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Voltar ao início?'),
+          content: const Text(
+            'A coleta ou o questionário em andamento será descartado.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Continuar aqui'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Descartar e voltar'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+    _reset();
+  }
+
   void _signalUser({bool strong = false}) {
     unawaited(
       (strong ? HapticFeedback.heavyImpact() : HapticFeedback.mediumImpact())
@@ -584,6 +797,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _mode = null;
       _phase = CollectionPhase.eyesOpen;
       _phaseElapsed = Duration.zero;
+      _eyesClosedStartedAt = null;
       _showHardware = false;
       _readings.clear();
       _clearRawState();
@@ -592,6 +806,10 @@ class _HomeScreenState extends State<HomeScreen> {
       _asrsAnswers.fillRange(0, _asrsAnswers.length, null);
       _exportMessage = null;
       _connectionMessage = null;
+      _interruptionReason = null;
+      _latestSignalQuality = null;
+      _signalStableSince = null;
+      _rawCadenceCompatible = null;
     });
   }
 
@@ -630,9 +848,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _export() async {
+    if (_exporting) return;
     final report = _report;
     if (report == null) return;
-    setState(() => _exportMessage = 'Preparando arquivo…');
+    setState(() {
+      _exporting = true;
+      _exportMessage = 'Preparando arquivo…';
+    });
     try {
       final root = await _bridge.getStorageRoot();
       if (root == null || root.isEmpty) {
@@ -652,6 +874,33 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() => _exportMessage =
             'Não foi possível exportar agora. A coleta continua nesta tela.');
       }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  Future<void> _openAdultScreening() async {
+    final eligible = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rastreio destinado a adultos'),
+        content: const Text(
+          'O ASRS v1.1 desta tela é destinado a pessoas com 18 anos ou mais. Ele indica possibilidade no rastreio e não é diagnóstico.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Não tenho 18 anos'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Tenho 18 anos ou mais'),
+          ),
+        ],
+      ),
+    );
+    if (eligible == true && mounted) {
+      setState(() => _step = CollectionStep.screening);
     }
   }
 
@@ -714,7 +963,7 @@ class _HomeScreenState extends State<HomeScreen> {
           if (_step != CollectionStep.choice)
             IconButton(
               tooltip: 'Voltar ao início',
-              onPressed: _reset,
+              onPressed: _requestReset,
               icon: const Icon(Icons.home_outlined),
             ),
           const SizedBox(width: 8),
@@ -732,6 +981,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   CollectionStep.choice => _choiceView(),
                   CollectionStep.instructions => _instructionsView(),
                   CollectionStep.running => _runningView(),
+                  CollectionStep.interrupted => _interruptedView(),
                   CollectionStep.result => _resultView(),
                   CollectionStep.screening => _screeningView(),
                 },
@@ -936,9 +1186,22 @@ class _HomeScreenState extends State<HomeScreen> {
           text:
               'Deixe o som ou a vibração do celular ativos. Não é preciso ficar de olhos fechados durante toda a sessão.',
         ),
+        if (isHardware) ...[
+          const SizedBox(height: 12),
+          Semantics(
+            liveRegion: true,
+            label: _signalPrecheckMessage,
+            child: _Notice(
+              icon: _signalReady
+                  ? Icons.check_circle_outline_rounded
+                  : Icons.sensors_rounded,
+              text: _signalPrecheckMessage,
+            ),
+          ),
+        ],
         const SizedBox(height: 18),
         FilledButton.icon(
-          onPressed: _startCollection,
+          onPressed: isHardware && !_signalReady ? null : _startCollection,
           icon: const Icon(Icons.play_arrow_rounded),
           label: Text(isHardware
               ? 'Começar teste de 2 minutos'
@@ -950,14 +1213,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _runningView() {
     final open = _phase == CollectionPhase.eyesOpen;
-    final currentQuality = _readings.isEmpty
-        ? null
-        : _readings
-            .lastWhere(
-              (reading) => reading.signalQuality != null,
-              orElse: () => const _Reading(),
-            )
-            .signalQuality;
+    final currentQuality = _latestSignalQuality ??
+        (_readings.isEmpty
+            ? null
+            : _readings
+                .lastWhere(
+                  (reading) => reading.signalQuality != null,
+                  orElse: () => const _Reading(),
+                )
+                .signalQuality);
     final contact = switch (currentQuality) {
       null => 'Aguardando sinal',
       <= 50 => 'Contato bom',
@@ -1038,9 +1302,46 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
         const SizedBox(height: 16),
         OutlinedButton.icon(
-          onPressed: _finishCollection,
+          onPressed: _confirmStopCollection,
           icon: const Icon(Icons.stop_circle_outlined),
           label: const Text('Encerrar agora'),
+        ),
+      ],
+    );
+  }
+
+  Widget _interruptedView() {
+    return Column(
+      key: const ValueKey('interrupted'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _StepHeader(
+          eyebrow: 'COLETA NÃO CONCLUÍDA',
+          title: 'Resultado não gerado',
+          subtitle:
+              'As duas etapas precisam ser contínuas para que o app apresente um resultado confiável.',
+        ),
+        const SizedBox(height: 16),
+        Semantics(
+          liveRegion: true,
+          child: _Notice(
+            icon: Icons.warning_amber_rounded,
+            text: _interruptionReason ?? 'A coleta foi interrompida.',
+          ),
+        ),
+        const SizedBox(height: 18),
+        FilledButton.icon(
+          onPressed: () => setState(() {
+            _step = CollectionStep.instructions;
+            _readings.clear();
+            _clearRawState();
+            _startedAt = null;
+            _endedAt = null;
+            _eyesClosedStartedAt = null;
+            _interruptionReason = null;
+          }),
+          icon: const Icon(Icons.replay_rounded),
+          label: const Text('Preparar nova coleta'),
         ),
       ],
     );
@@ -1096,32 +1397,43 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(height: 14),
-        Row(
-          children: [
-            Expanded(
-              child: _MetricCard(
-                icon: Icons.track_changes_rounded,
-                label: 'Atenção do aparelho',
-                value: _formatMean(_displayAttentionMean),
-                color: const Color(0xFF67A7FF),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _MetricCard(
-                icon: Icons.spa_outlined,
-                label: 'Relaxamento do aparelho',
-                value: _formatMean(_displayMeditationMean),
-                color: const Color(0xFF56D6B3),
-              ),
-            ),
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final attentionCard = _MetricCard(
+              icon: Icons.track_changes_rounded,
+              label: 'Atenção do aparelho',
+              value: _formatMean(_displayAttentionMean),
+              color: const Color(0xFF67A7FF),
+            );
+            final meditationCard = _MetricCard(
+              icon: Icons.spa_outlined,
+              label: 'Relaxamento do aparelho',
+              value: _formatMean(_displayMeditationMean),
+              color: const Color(0xFF56D6B3),
+            );
+            if (constraints.maxWidth < 420) {
+              return Column(
+                children: [
+                  attentionCard,
+                  const SizedBox(height: 12),
+                  meditationCard,
+                ],
+              );
+            }
+            return Row(
+              children: [
+                Expanded(child: attentionCard),
+                const SizedBox(width: 12),
+                Expanded(child: meditationCard),
+              ],
+            );
+          },
         ),
         const SizedBox(height: 14),
         if (asrs == null)
           _AsrsPromptCard(
             isHardware: _mode == AcquisitionMode.hardware,
-            onPressed: () => setState(() => _step = CollectionStep.screening),
+            onPressed: _openAdultScreening,
           )
         else
           _AsrsResultCard(result: asrs),
@@ -1136,11 +1448,18 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
         const SizedBox(height: 18),
         FilledButton.icon(
-          onPressed: _export,
-          icon: const Icon(Icons.ios_share_rounded),
-          label: Text(asrs == null
-              ? 'Exportar resultado da coleta'
-              : 'Exportar os dois resultados'),
+          onPressed: _exporting ? null : _export,
+          icon: _exporting
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.ios_share_rounded),
+          label: Text(_exporting
+              ? 'Preparando arquivo…'
+              : asrs == null
+                  ? 'Exportar resultado da coleta'
+                  : 'Exportar os dois resultados'),
         ),
         const SizedBox(height: 10),
         OutlinedButton.icon(
@@ -1208,6 +1527,13 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
+        if (answered < AsrsScreener6.itemCount) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Faltam ${AsrsScreener6.itemCount - answered} resposta(s).',
+            style: const TextStyle(color: Color(0xFFAAB8CA)),
+          ),
+        ],
         const SizedBox(height: 14),
         for (var index = 0;
             index < AsrsScreener6.questions.length;
@@ -1237,25 +1563,29 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  DropdownButtonFormField<AsrsResponse>(
-                    key: ValueKey('asrs_answer_$index'),
-                    initialValue: _asrsAnswers[index],
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Resposta',
-                      border: OutlineInputBorder(),
+                  Semantics(
+                    label:
+                        'Pergunta ${index + 1}. ${AsrsScreener6.questions[index]}. Resposta: ${_asrsAnswers[index]?.label ?? 'não informada'}',
+                    child: DropdownButtonFormField<AsrsResponse>(
+                      key: ValueKey('asrs_answer_$index'),
+                      initialValue: _asrsAnswers[index],
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: 'Resposta da pergunta ${index + 1}',
+                        border: const OutlineInputBorder(),
+                      ),
+                      items: [
+                        for (final response in AsrsResponse.values)
+                          DropdownMenuItem(
+                            value: response,
+                            child: Text(response.label),
+                          ),
+                      ],
+                      onChanged: (response) {
+                        if (response == null) return;
+                        setState(() => _asrsAnswers[index] = response);
+                      },
                     ),
-                    items: [
-                      for (final response in AsrsResponse.values)
-                        DropdownMenuItem(
-                          value: response,
-                          child: Text(response.label),
-                        ),
-                    ],
-                    onChanged: (response) {
-                      if (response == null) return;
-                      setState(() => _asrsAnswers[index] = response);
-                    },
                   ),
                 ],
               ),
@@ -1826,26 +2156,33 @@ class _BandComparisonRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 48,
-          child: Text(
-            band.label,
-            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
-          ),
+    return Semantics(
+      label:
+          '${band.label}: olhos abertos ${eyesOpen.round()} por cento; olhos fechados ${eyesClosed.round()} por cento',
+      child: ExcludeSemantics(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 48,
+              child: Text(
+                band.label,
+                style:
+                    const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+              ),
+            ),
+            Expanded(
+              child: Column(
+                children: [
+                  _PowerBar(value: eyesOpen, color: const Color(0xFF67A7FF)),
+                  const SizedBox(height: 5),
+                  _PowerBar(value: eyesClosed, color: const Color(0xFF56D6B3)),
+                ],
+              ),
+            ),
+          ],
         ),
-        Expanded(
-          child: Column(
-            children: [
-              _PowerBar(value: eyesOpen, color: const Color(0xFF67A7FF)),
-              const SizedBox(height: 5),
-              _PowerBar(value: eyesClosed, color: const Color(0xFF56D6B3)),
-            ],
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

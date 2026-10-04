@@ -17,8 +17,8 @@ void main() {
         'permissionScan': true,
         'permissionConnect': true,
         'permissionLocation': false,
-        'bondedCount': 2,
-        'bondedNames': 'BrainLink Lite, Fone',
+        'bondedCount': 1,
+        'bondedNames': 'BrainLink Lite',
       },
     );
 
@@ -30,6 +30,8 @@ void main() {
     expect(texto, contains('Localização: NÃO'));
     expect(texto, contains('Buscar Bluetooth: sim'));
     expect(texto, contains('BrainLink Lite'));
+    expect(texto, isNot(contains('Fone')));
+    expect(texto, contains('BrainLinks pareados'));
     expect(texto, contains('Nenhum evento registrado nesta sessão.'));
   });
 

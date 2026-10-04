@@ -12,6 +12,7 @@ class RawBatch {
     required this.poorSignal,
     required this.dropped,
     required this.samples,
+    this.observedSampleRateHz,
   });
 
   /// Sequencial do lote, reiniciado a cada conexão.
@@ -38,6 +39,15 @@ class RawBatch {
   /// Contagens do conversor, sem conversão de unidade.
   final Int32List samples;
 
+  /// Cadência observada pela camada nativa entre o fechamento deste lote e o
+  /// anterior. Ausente no primeiro lote da conexão e em dados legados.
+  ///
+  /// A constante de protocolo `CODE_RAW = 128` identifica o evento `0x80`; ela
+  /// não é uma taxa. O ASIC TGAT/TGAM normalmente entrega 512 amostras/s, mas a
+  /// cadência observada continua sendo transportada para detectar variantes ou
+  /// configurações de hardware incompatíveis antes de calcular o espectro.
+  final double? observedSampleRateHz;
+
   /// Taxa do EEG bruto, em hertz.
   ///
   /// O chip TGAM do BrainLink Lite amostra a 512 Hz e é isso que governa o
@@ -45,6 +55,13 @@ class RawBatch {
   /// todas as bandas na mesma proporção, sem nenhum sinal de erro.
   /// Um lote fechado carrega exatamente esta quantidade de amostras.
   static const int sampleRateHz = 512;
+
+  bool hasExpectedCadence({double maximumDeviationFraction = 0.15}) {
+    final observed = observedSampleRateHz;
+    return observed == null ||
+        (observed - sampleRateHz).abs() / sampleRateHz <=
+            maximumDeviationFraction;
+  }
 
   /// Fator de conversão do ThinkGear: `µV = raw × (1,8 / 4096) / 2000 × 1e6`.
   static const double microvoltsPerUnit = 0.2197;
@@ -61,6 +78,7 @@ class RawBatch {
       ),
       poorSignal: (map['poorSignal'] as num?)?.toInt() ?? 200,
       dropped: (map['dropped'] as num?)?.toInt() ?? 0,
+      observedSampleRateHz: (map['observedSampleRateHz'] as num?)?.toDouble(),
       samples: raw is Int32List
           ? raw
           : Int32List.fromList(
@@ -90,5 +108,5 @@ class RawBatch {
   @override
   String toString() =>
       'RawBatch(seq: $seq, n: ${samples.length}, poorSignal: $poorSignal, '
-      'dropped: $dropped)';
+      'dropped: $dropped, observedHz: $observedSampleRateHz)';
 }

@@ -38,8 +38,9 @@ Três achados sustentam a mudança:
    efeitos significativos no subtipo desatento.
 2. A American Academy of Neurology **recomenda formalmente não usá-lo**, citando
    risco de dano por taxa inaceitável de falso-positivo.
-3. O SDK do dispositivo **expõe EEG bruto a 128 Hz**. O produto entregue agora o
-   transporta e o usa para visualização descritiva, sem inferência de TDAH.
+3. O SDK expõe `CODE_RAW = 128`, em que 128 identifica o evento `0x80`. O
+   contrato atual espera **512 amostras/s** do raw de 16 bits, mede a cadência
+   real e ainda exige confirmação no hardware físico.
 
 **O objetivo não muda. O método muda.** O produto deixa de perseguir um detector
 e passa a ser um instrumento de observação longitudinal, ancorado em escala
@@ -56,7 +57,7 @@ comparação intra-sujeito sobre a qual todo o método se apoia.
 | Dimensão | Antes | Depois |
 | --- | --- | --- |
 | **Marcador** | Razão theta/beta | Expoente aperiódico + IAF + potência corrigida |
-| **Fonte de dados** | 8 bandas prontas do SDK (~1 Hz) | EEG bruto a 128 Hz, com espectro calculado por nós |
+| **Fonte de dados** | 8 bandas prontas do SDK (~1 Hz) | EEG bruto esperado a 512 Hz, com cadência verificada e espectro calculado por nós |
 | **Referência** | Implícita, populacional | **Intra-sujeito** — a pessoa comparada a ela mesma |
 | **Público** | Não definido | **Adultos, 18+** |
 | **Instrumento de rastreio** | Ausente | **ASRS v1.1 6Q** (adultos, PT-BR, autoaplicada) |
@@ -125,8 +126,9 @@ void startRecordRawData();          // gravação nativa, serve de referência
 void MWM15_setFilterType(...);      // FILTER_60HZ — nunca configurado
 ```
 
-O EEG bruto, antes descartado, agora é enviado ao Dart em lotes de 128 amostras
-com sequência, qualidade de contato e contagem de perdas.
+O EEG bruto, antes descartado, agora é enviado ao Dart em lotes de 512 amostras
+com sequência, qualidade de contato, perdas e taxa observada por relógio
+monotônico.
 
 ---
 
@@ -143,7 +145,7 @@ Esta é a base honesta do que se pode prometer.
 | Detectar o efeito Berger | Confirmado — serve de teste de sanidade do hardware |
 | Detectar artefatos de piscada e mandíbula | **100%** dos testados, no nível do equipamento de referência |
 | Resistir a ruído de movimento | r = 0,95 — o melhor entre quatro dispositivos de consumo |
-| Fornecer EEG bruto a 128 Hz | Nyquist em 64 Hz, cobre todo o espectro de interesse |
+| Fornecer EEG bruto esperado a 512 Hz | Nyquist em 256 Hz; a cadência do BrainLink Lite físico permanece um portão de homologação |
 | Calcular expoente aperiódico | Possível a partir do bruto |
 | Indexar vigilância por theta frontal | Fp1 está na região certa |
 | Registro longitudinal intra-sujeito | É a aplicação natural do dispositivo |
@@ -247,9 +249,10 @@ FFT radix-2 · janela de Hann · Welch · remoção de tendência · ajuste aper
 (`specparam`) · estimador de IAF · rejeição de época · linha de base
 intra-sujeito.
 
-Parâmetros a 128 Hz: época de 8 s (1024 amostras), sub-segmento de 2 s
-(0,5 Hz de resolução), faixa de ajuste 2–40 Hz. Detalhes em
-[[A2-indice-espectral-multifeature]].
+O pipeline de pesquisa offline pode reamostrar para 128 Hz de forma explícita e
+anti-aliasada: época de 8 s (1024 amostras), sub-segmento de 2 s (0,5 Hz de
+resolução), faixa de ajuste 2–40 Hz. O pipeline do aplicativo permanece a 512
+Hz. Detalhes em [[A2-indice-espectral-multifeature]].
 
 **Zero dependências novas.** Dart puro resolve.
 

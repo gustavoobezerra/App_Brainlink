@@ -77,7 +77,7 @@ class EegSpectrumAnalysis {
     required this.minimumEpochsPerPhase,
   });
 
-  static const String pipelineVersion = 'spectrum-v1.0.0';
+  static const String pipelineVersion = 'spectrum-v1.1.0';
   static const String historicalAdhdContext =
       'Alguns estudos relatam mais theta e menos beta em pacientes com TDAH, '
       'mas isso não é diagnóstico. Responda ao questionário e procure um '
@@ -148,6 +148,7 @@ class EegSpectrumAnalyzer {
     this.maximumAbsoluteMicrovolts = 150,
     this.maximumPeakToPeakMicrovolts = 200,
     this.minimumStandardDeviationMicrovolts = 0.5,
+    this.maximumSampleRateDeviationFraction = 0.15,
   });
 
   final int sampleRateHz;
@@ -157,6 +158,7 @@ class EegSpectrumAnalyzer {
   final double maximumAbsoluteMicrovolts;
   final double maximumPeakToPeakMicrovolts;
   final double minimumStandardDeviationMicrovolts;
+  final double maximumSampleRateDeviationFraction;
 
   EegSpectrumAnalysis analyze({
     required List<RawBatch> eyesOpen,
@@ -294,9 +296,13 @@ class EegSpectrumAnalyzer {
       final complete = batch.samples.length == sampleRateHz;
       final continuous =
           previousSequence == null || batch.seq == previousSequence + 1;
+      final cadenceValid = batch.hasExpectedCadence(
+        maximumDeviationFraction: maximumSampleRateDeviationFraction,
+      );
       final batchValid = complete &&
           continuous &&
           batch.dropped == 0 &&
+          cadenceValid &&
           batch.poorSignal <= maximumPoorSignal;
       final converted = batch.toMicrovolts();
       for (var index = 0; index < converted.length; index++) {

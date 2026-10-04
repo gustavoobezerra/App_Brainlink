@@ -147,6 +147,25 @@ void main() {
   });
 
   group('conexão', () {
+    test('recebe contato sem depender de potências EEG', () async {
+      final bridge = BrainLinkBridge();
+      final qualities = <int>[];
+      final snapshots = <Object>[];
+      final contactSubscription =
+          bridge.signalQualityStream.listen(qualities.add);
+      final eegSubscription = bridge.eegDataStream.listen(snapshots.add);
+      try {
+        await doAndroid('onSignalQuality', 200);
+        await doAndroid('onSignalQuality', 0);
+        await Future<void>.delayed(Duration.zero);
+        expect(qualities, [200, 0]);
+        expect(snapshots, isEmpty);
+      } finally {
+        await contactSubscription.cancel();
+        await eegSubscription.cancel();
+      }
+    });
+
     test('leva ao usuário a causa informada pelo Android', () async {
       final erros = <Object>[];
       await runZonedGuarded(() async {

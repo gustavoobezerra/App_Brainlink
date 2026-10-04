@@ -1,0 +1,297 @@
+[
+  {
+    "page": 1,
+    "title": "BrainLink explicado do zero",
+    "bottom_y": 245.5
+  },
+  {
+    "page": 2,
+    "title": "Como aproveitar este guia",
+    "bottom_y": 250.6
+  },
+  {
+    "page": 3,
+    "title": "Onde está cada assunto",
+    "bottom_y": 163.7
+  },
+  {
+    "page": 4,
+    "title": "Onde está cada assunto",
+    "bottom_y": 182.7
+  },
+  {
+    "page": 5,
+    "title": "O projeto inteiro em uma página",
+    "bottom_y": 265.5
+  },
+  {
+    "page": 6,
+    "title": "O que o contato na testa percebe",
+    "bottom_y": 365.8
+  },
+  {
+    "page": 7,
+    "title": "Três contatos não são três canais",
+    "bottom_y": 250.4
+  },
+  {
+    "page": 8,
+    "title": "Sinal bruto, índices prontos e som",
+    "bottom_y": 291.5
+  },
+  {
+    "page": 9,
+    "title": "512 Hz, 128 e a velocidade da coleta",
+    "bottom_y": 304.1
+  },
+  {
+    "page": 10,
+    "title": "Amostragem não é horário de entrega",
+    "bottom_y": 245.3
+  },
+  {
+    "page": 11,
+    "title": "Como a sessão acontece hoje",
+    "bottom_y": 282.4
+  },
+  {
+    "page": 12,
+    "title": "Qualidade: o que aceitamos e rejeitamos",
+    "bottom_y": 292.6
+  },
+  {
+    "page": 13,
+    "title": "Por que cortar o sinal em pedaços",
+    "bottom_y": 244.2
+  },
+  {
+    "page": 14,
+    "title": "Preparar o traçado para fazer a conta",
+    "bottom_y": 372.9
+  },
+  {
+    "page": 15,
+    "title": "Frequência e amplitude sem mistério",
+    "bottom_y": 278.7
+  },
+  {
+    "page": 16,
+    "title": "FFT: olhar a mesma mistura de outro jeito",
+    "bottom_y": 274.0
+  },
+  {
+    "page": 17,
+    "title": "As bandas são gavetas de frequência",
+    "bottom_y": 179.8
+  },
+  {
+    "page": 18,
+    "title": "Potência e PSD: como colocar uma régua",
+    "bottom_y": 353.8
+  },
+  {
+    "page": 19,
+    "title": "Porcentagem pode aumentar sem a banda aumentar",
+    "bottom_y": 249.5
+  },
+  {
+    "page": 20,
+    "title": "A média também precisa de uma receita",
+    "bottom_y": 272.5
+  },
+  {
+    "page": 21,
+    "title": "O que theta maior que beta significa hoje",
+    "bottom_y": 286.0
+  },
+  {
+    "page": 22,
+    "title": "Periódico e aperiódico: terreno e montanhas",
+    "bottom_y": 239.0
+  },
+  {
+    "page": 23,
+    "title": "A inclinação sem medo do logaritmo",
+    "bottom_y": 263.1
+  },
+  {
+    "page": 24,
+    "title": "A conta de 2,87, passo a passo",
+    "bottom_y": 179.4
+  },
+  {
+    "page": 25,
+    "title": "Nível, inclinação, posição e largura",
+    "bottom_y": 174.8
+  },
+  {
+    "page": 26,
+    "title": "Como separar os componentes na prática",
+    "bottom_y": 342.1
+  },
+  {
+    "page": 27,
+    "title": "Quando a curva bonita engana",
+    "bottom_y": 220.3
+  },
+  {
+    "page": 28,
+    "title": "Uma razão ajustada: hipótese para comparar",
+    "bottom_y": 302.6
+  },
+  {
+    "page": 29,
+    "title": "O pico alfa de cada pessoa",
+    "bottom_y": 245.9
+  },
+  {
+    "page": 30,
+    "title": "O que muda quando a pessoa fecha os olhos",
+    "bottom_y": 349.6
+  },
+  {
+    "page": 31,
+    "title": "Adicionar uma tarefa de atenção",
+    "bottom_y": 252.4
+  },
+  {
+    "page": 32,
+    "title": "Como medir o desempenho da tarefa",
+    "bottom_y": 306.2
+  },
+  {
+    "page": 33,
+    "title": "Por que milissegundos exigem outra preparação",
+    "bottom_y": 327.6
+  },
+  {
+    "page": 34,
+    "title": "ASRS: de onde sai a possibilidade aumentada",
+    "bottom_y": 261.1
+  },
+  {
+    "page": 35,
+    "title": "O que o profissional recebe hoje",
+    "bottom_y": 275.9
+  },
+  {
+    "page": 36,
+    "title": "Hoje e proposta: aquisição e matemática",
+    "bottom_y": 307.8
+  },
+  {
+    "page": 37,
+    "title": "Hoje e proposta: interpretação e pesquisa",
+    "bottom_y": 297.9
+  },
+  {
+    "page": 38,
+    "title": "Uma sessão fictícia, acompanhada do início",
+    "bottom_y": 336.0
+  },
+  {
+    "page": 39,
+    "title": "O mesmo relatório, lido com cuidado",
+    "bottom_y": 248.8
+  },
+  {
+    "page": 40,
+    "title": "Como seria um modelo combinado",
+    "bottom_y": 264.5
+  },
+  {
+    "page": 41,
+    "title": "Como evitar uma acurácia de fachada",
+    "bottom_y": 228.3
+  },
+  {
+    "page": 42,
+    "title": "Sensibilidade, especificidade e os quatro resultados",
+    "bottom_y": 288.2
+  },
+  {
+    "page": 43,
+    "title": "80% de sensibilidade não é 80% de chance",
+    "bottom_y": 265.4
+  },
+  {
+    "page": 44,
+    "title": "O EEG acrescentou algo de verdade?",
+    "bottom_y": 344.0
+  },
+  {
+    "page": 45,
+    "title": "Uma medida repetível ainda pode estar errada",
+    "bottom_y": 294.7
+  },
+  {
+    "page": 46,
+    "title": "O que aprender com dados públicos",
+    "bottom_y": 320.9
+  },
+  {
+    "page": 47,
+    "title": "Uma ordem prática para melhorar o projeto",
+    "bottom_y": 321.6
+  },
+  {
+    "page": 48,
+    "title": "Onde a Psicologia pode contribuir",
+    "bottom_y": 268.1
+  },
+  {
+    "page": 49,
+    "title": "Outras contas: quando vale explorar",
+    "bottom_y": 353.5
+  },
+  {
+    "page": 50,
+    "title": "Uma paródia: o julgamento do theta",
+    "bottom_y": 227.6
+  },
+  {
+    "page": 51,
+    "title": "Dúvidas que costumam sobrar",
+    "bottom_y": 286.3
+  },
+  {
+    "page": 52,
+    "title": "Dicionário de bolso: do aparelho ao espectro",
+    "bottom_y": 248.5
+  },
+  {
+    "page": 53,
+    "title": "Dicionário de bolso: interpretação e pesquisa",
+    "bottom_y": 212.1
+  },
+  {
+    "page": 54,
+    "title": "Fontes: aquisição e processamento",
+    "bottom_y": 389.4
+  },
+  {
+    "page": 55,
+    "title": "Fontes: periodicidade e razões",
+    "bottom_y": 359.8
+  },
+  {
+    "page": 56,
+    "title": "Fontes: TDAH, ASRS e tarefa",
+    "bottom_y": 431.3
+  },
+  {
+    "page": 57,
+    "title": "Fontes: aparelhos, dados e avaliação",
+    "bottom_y": 390.0
+  },
+  {
+    "page": 58,
+    "title": "De onde veio a descrição do app",
+    "bottom_y": 296.0
+  },
+  {
+    "page": 59,
+    "title": "Como explicar o projeto na reunião",
+    "bottom_y": 216.9
+  }
+]

@@ -2,7 +2,7 @@
 titulo: Fluxo de dados atual
 tags: [codigo, arquitetura]
 status: consolidado
-atualizado: 2026-08-17
+atualizado: 2026-09-30
 ---
 
 # Fluxo de dados atual
@@ -12,7 +12,7 @@ flowchart TD
     A["Demonstração"] --> E["Coleta guiada<br/>abertos → fechados"]
     B["BrainLink Lite"] --> C["SDK Android<br/>filtro 60 Hz"]
     C -->|"eSense + poorSignal ~1 Hz"| D["MethodChannel"]
-    C -->|"raw 128 Hz em lotes"| R["EventChannel"]
+    C -->|"raw esperado 512 Hz + cadência observada"| R["EventChannel"]
     D --> E
     R --> W["Traçado ao vivo<br/>últimos 5 s"]
     R --> X["Épocas + rejeição de artefato<br/>FFT + bandas relativas"]

@@ -26,6 +26,8 @@
     <application
         android:label="Projeto BrainLink"
         android:name="${applicationName}"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
         android:icon="@drawable/ic_brainlink"
         android:roundIcon="@drawable/ic_brainlink">
 

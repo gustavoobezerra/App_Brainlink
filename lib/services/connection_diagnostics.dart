@@ -66,12 +66,12 @@ class ConnectionDiagnostics {
         ..writeln();
 
       final bonded = device['bondedCount'];
-      buffer.writeln('== Aparelhos pareados ==');
+      buffer.writeln('== BrainLinks pareados ==');
       if (bonded is int && bonded >= 0) {
         buffer.writeln('Total: $bonded');
         final names = device['bondedNames'];
         if (names is String && names.isNotEmpty) {
-          buffer.writeln('Nomes: $names');
+          buffer.writeln('Modelos anunciados: $names');
         }
       } else {
         buffer.writeln('Indisponível sem a permissão de conexão.');

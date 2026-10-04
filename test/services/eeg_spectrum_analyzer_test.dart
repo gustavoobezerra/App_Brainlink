@@ -71,6 +71,23 @@ void main() {
     expect(gap.eyesOpen.rejectedEpochs, greaterThan(0));
   });
 
+  test('rejeita cadência incompatível com 512 amostras por segundo', () {
+    final wrongCadence = analyzer.analyze(
+      eyesOpen: _sineBatches(10, observedSampleRateHz: 128),
+      eyesClosed: _sineBatches(10, observedSampleRateHz: 128),
+      minimumEpochsPerPhase: 1,
+    );
+    final expectedCadence = analyzer.analyze(
+      eyesOpen: _sineBatches(10, observedSampleRateHz: 510),
+      eyesClosed: _sineBatches(10, observedSampleRateHz: 510),
+      minimumEpochsPerPhase: 1,
+    );
+
+    expect(wrongCadence.isUsable, isFalse);
+    expect(wrongCadence.acceptedEpochs, 0);
+    expect(expectedCadence.isUsable, isTrue);
+  });
+
   test('rejeita sinal plano e amplitude compatível com artefato', () {
     final flat = List<RawBatch>.generate(
       4,
@@ -138,6 +155,7 @@ List<RawBatch> _sineBatches(
   int poorSignal = 0,
   int? droppedAt,
   double amplitudeMicrovolts = 20,
+  double? observedSampleRateHz,
 }) {
   return List<RawBatch>.generate(count, (batchIndex) {
     final samples = Int32List(RawBatch.sampleRateHz);
@@ -154,6 +172,7 @@ List<RawBatch> _sineBatches(
       t0: DateTime.fromMillisecondsSinceEpoch(batchIndex * 1000),
       poorSignal: poorSignal,
       dropped: droppedAt == batchIndex ? 1 : 0,
+      observedSampleRateHz: observedSampleRateHz,
       samples: samples,
     );
   });

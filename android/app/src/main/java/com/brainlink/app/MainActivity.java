@@ -15,6 +15,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 
 import androidx.annotation.NonNull;
 import androidx.core.content.FileProvider;
@@ -30,6 +31,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import io.flutter.embedding.android.FlutterActivity;
@@ -74,6 +76,7 @@ public class MainActivity extends FlutterActivity {
     private int rawCount;
     private long rawSequence;
     private int droppedRawSamples;
+    private long previousRawBatchMonotonicMillis;
 
     // Escritos pela thread do SDK e lidos pela main thread.
     private volatile Integer currentAttention;
@@ -530,6 +533,9 @@ public class MainActivity extends FlutterActivity {
                         break;
                     case MindDataType.CODE_POOR_SIGNAL:
                         currentSignalQuality = value;
+                        // O contato chega mesmo quando não há EEGPOWER válido.
+                        android.util.Log.i("BrainLinkContact", "poorSignal=" + value);
+                        invokeMethodOnFlutter("onSignalQuality", value);
                         break;
                     case MindDataType.CODE_EEGPOWER:
                         if (payload instanceof EEGPower
@@ -612,6 +618,7 @@ public class MainActivity extends FlutterActivity {
         int dropped = 0;
         int poorSignal = 200;
         long timestamp = 0;
+        double observedSampleRateHz = 0;
 
         synchronized (rawLock) {
             rawBuffer[rawCount++] = sample;
@@ -624,10 +631,24 @@ public class MainActivity extends FlutterActivity {
                 Integer currentPoorSignal = currentSignalQuality;
                 poorSignal = currentPoorSignal == null ? 200 : currentPoorSignal;
                 timestamp = System.currentTimeMillis();
+                long monotonicNow = SystemClock.elapsedRealtime();
+                if (previousRawBatchMonotonicMillis > 0
+                        && monotonicNow > previousRawBatchMonotonicMillis) {
+                    observedSampleRateHz = RAW_BATCH_SIZE * 1000.0
+                            / (monotonicNow - previousRawBatchMonotonicMillis);
+                }
+                previousRawBatchMonotonicMillis = monotonicNow;
             }
         }
         if (completedBatch != null) {
-            emitRawBatch(completedBatch, sequence, timestamp, poorSignal, dropped);
+            emitRawBatch(
+                    completedBatch,
+                    sequence,
+                    timestamp,
+                    poorSignal,
+                    dropped,
+                    observedSampleRateHz
+            );
         }
     }
 
@@ -636,7 +657,8 @@ public class MainActivity extends FlutterActivity {
             long sequence,
             long timestamp,
             int poorSignal,
-            int dropped
+            int dropped,
+            double observedSampleRateHz
     ) {
         EventChannel.EventSink expectedSink = rawEventSink;
         if (expectedSink == null) {
@@ -650,6 +672,10 @@ public class MainActivity extends FlutterActivity {
         batch.put("poorSignal", poorSignal);
         batch.put("dropped", dropped);
         batch.put("samples", samples);
+        batch.put("sampleRateHz", RAW_BATCH_SIZE);
+        if (observedSampleRateHz > 0) {
+            batch.put("observedSampleRateHz", observedSampleRateHz);
+        }
         postToFlutter(() -> {
             if (rawEventSink == expectedSink) {
                 expectedSink.success(batch);
@@ -687,6 +713,7 @@ public class MainActivity extends FlutterActivity {
             rawCount = 0;
             rawSequence = 0;
             droppedRawSamples = 0;
+            previousRawBatchMonotonicMillis = 0;
         }
     }
 
@@ -833,14 +860,20 @@ public class MainActivity extends FlutterActivity {
                 StringBuilder names = new StringBuilder();
                 bonded = 0;
                 for (BluetoothDevice device : bluetoothAdapter.getBondedDevices()) {
+                    String name = device.getName();
+                    if (name == null
+                            || !name.toLowerCase(Locale.ROOT)
+                                    .replace(" ", "")
+                                    .replace("_", "")
+                                    .replace("-", "")
+                                    .contains("brainlink")) {
+                        continue;
+                    }
                     bonded++;
                     if (names.length() > 0) {
                         names.append(", ");
                     }
-                    String name = device.getName();
-                    names.append(name == null || name.trim().isEmpty()
-                            ? UNKNOWN_DEVICE_NAME
-                            : name.trim());
+                    names.append(name.trim());
                 }
                 bondedNames = names.toString();
             } catch (SecurityException ignored) {

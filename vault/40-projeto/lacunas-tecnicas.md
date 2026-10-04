@@ -2,7 +2,7 @@
 titulo: Lacunas técnicas por abordagem
 tags: [codigo, planejamento]
 status: consolidado
-atualizado: 2026-08-17
+atualizado: 2026-09-30
 ---
 
 # Lacunas técnicas por abordagem
@@ -48,8 +48,9 @@ capacidades clínicas já exibidas.
 ### Validação do `CODE_RAW` no hardware real
 **Destrava:** confiança no pipeline descritivo já implementado.
 
-`CODE_RAW = 128` já chega ao Dart em lotes pelo `EventChannel`, com sequência,
-perdas e `poorSignal`; a interface mostra o traçado e as bandas relativas. Ainda
+`CODE_RAW = 128` (`0x80`, código do evento) já chega ao Dart em lotes de 512
+amostras pelo `EventChannel`, com sequência, perdas, `poorSignal` e cadência
+observada; a interface mostra o traçado e as bandas relativas. Ainda
 falta comparar uma gravação real com `startRecordRawData()`/
 `setRecordStreamFilePath()` do SDK e ajustar os limiares de artefato no conjunto
 BrainLink + Android usado na apresentação. Ver [[sdk-libstreamsdk]] e

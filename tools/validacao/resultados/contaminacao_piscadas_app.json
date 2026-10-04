@@ -1,0 +1,15 @@
+{
+ "n_participantes": 29,
+ "fracao_aceitos_com_piscada_mediana": 0.4336283185840708,
+ "fracao_aceitos_com_piscada_iqr": [
+  0.31313131313131315,
+  0.672566371681416
+ ],
+ "delta_relativo_com_piscada_mediana": 56.81334875293753,
+ "delta_relativo_sem_piscada_mediana": 29.755941471174594,
+ "delta_wilcoxon_p": 3.725290298461914e-09,
+ "theta_relativo_com_piscada_mediana": 24.703997870842045,
+ "theta_relativo_sem_piscada_mediana": 25.365516885053243,
+ "theta_wilcoxon_p": 0.9321278370916843,
+ "n_pareados": 29
+}

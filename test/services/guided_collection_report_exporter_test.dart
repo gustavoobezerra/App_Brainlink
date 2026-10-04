@@ -125,7 +125,7 @@ void main() {
     expect(text, contains('possibilidade aumentada de TDAH'));
     expect(text, contains('não é diagnóstico'));
     expect(text, isNot(contains('NÃO ENTRA NO RASTREIO DE TDAH')));
-    expect(text, contains('Pipeline: spectrum-v1.0.0'));
+    expect(text, contains('Pipeline: spectrum-v1.1.0'));
     expect(text, contains('RESPOSTAS REGISTRADAS JUNTO COM O EEG'));
     expect(text, contains('corte 14 atingido'));
     expect(text, contains('rastreio justifica procurar um médico'));
@@ -167,6 +167,6 @@ void main() {
     expect(html, contains('Poucos trechos aproveitáveis'));
     expect(html, isNot(contains('<table class="bands">')));
     expect(text, isNot(contains('Delta:')));
-    expect(text, contains('Pipeline: spectrum-v1.0.0'));
+    expect(text, contains('Pipeline: spectrum-v1.1.0'));
   });
 }

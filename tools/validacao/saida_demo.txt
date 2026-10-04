@@ -1,0 +1,15 @@
+[ok] PSD calibrado: seno 20 µV -> 200.0 µV² (esperado 200)
+[ok] IAF: verdadeira 8.50 Hz -> estimada 8.50 Hz
+[ok] IAF: verdadeira 10.00 Hz -> estimada 10.00 Hz
+[ok] IAF: verdadeira 11.50 Hz -> estimada 11.50 Hz
+[ok] Sem pico alfa -> 'pico alfa não identificável'
+[ok] Relógio: taxa real 511.3 Hz -> estimada 511.30 Hz
+     erro de horário (p95): chegada do lote 64.8 ms -> relógio reconstruído 0.27 ms
+
+Demonstração do mecanismo Lansbergen (dados simulados, não clínicos)
+Os dois grupos têm o mesmo theta e o mesmo fundo; só a IAF muda.
+O resultado correto é d ≈ 0.
+  ln TBR, bandas fixas            : d = +0.46, p = 0.047 (n = 40 x 40)
+  ln TBR, bandas pela IAF         : d = +2.06, p = 1.6e-13 (n = 40 x 40)
+  D_TBR, bandas fixas (sem fundo) : d = +0.49, p = 0.034 (n = 40 x 40)
+  D_TBR, bandas IAF (sem fundo)   : d = +0.37, p = 0.11 (n = 40 x 40)

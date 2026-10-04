@@ -2,7 +2,7 @@
 titulo: SDK libStreamSDK v1.3.2 — API real
 tags: [hardware/sdk, codigo, evidencia/verificada]
 status: consolidado
-atualizado: 2026-08-18
+atualizado: 2026-09-30
 ---
 
 # SDK libStreamSDK v1.3.2 — API real
@@ -91,10 +91,11 @@ public interface TgStreamHandler {
 
 ### 1. O EEG bruto está a poucas linhas de distância
 
-`CODE_RAW = 128` chega pelo **mesmo** `onDataReceived` já implementado — hoje ele
-cai no `default: break` de `MainActivity.java`. Além disso, `startRecordRawData()`
-grava o stream em arquivo nativamente, o que serve de verdade de referência para
-validar qualquer pipeline próprio.
+`CODE_RAW = 128` chega pelo **mesmo** `onDataReceived`; 128 é o código decimal de
+`0x80`, não uma frequência. O app já agrupa o callback em lotes de 512 amostras,
+mede a cadência monotônica e envia ao Dart. Além disso, `startRecordRawData()`
+grava o stream em arquivo nativamente e continua sendo a referência para validar
+o pipeline no hardware físico.
 
 É o destravamento de maior alavancagem do projeto. Ver
 [[ADR-002-consumir-eeg-bruto]].

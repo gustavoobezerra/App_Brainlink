@@ -2,7 +2,7 @@
 titulo: "ADR-002 — Consumir CODE_RAW do SDK"
 tags: [adr, hardware/sdk, arquitetura]
 status: consolidado
-atualizado: 2026-08-17
+atualizado: 2026-09-30
 ---
 
 # ADR-002 — Consumir `CODE_RAW` do SDK
@@ -13,8 +13,9 @@ atualizado: 2026-08-17
 ## Contexto
 
 Na auditoria inicial, o app consumia apenas as saídas pré-processadas do SDK:
-oito bandas agregadas e os índices eSense, a ~1 Hz. `CODE_RAW = 128` chegava ao
-`onDataReceived` e era descartado por `MainActivity.java`.
+oito bandas agregadas e os índices eSense, a ~1 Hz. `CODE_RAW = 128` — código
+decimal do evento `0x80`, não taxa — chegava ao `onDataReceived` e era
+descartado por `MainActivity.java`.
 
 Verificação direta do JAR com `javap` confirmou o que está disponível — ver
 [[sdk-libstreamsdk]]:
@@ -26,7 +27,10 @@ void stopRecordRawData();
 void setRecordStreamFilePath(java.lang.String);
 ```
 
-O BrainLink Lite v2.0 fornece EEG bruto a 128 Hz.
+O contrato atual espera o raw de 16 bits do ASIC TGAT/TGAM a 512 Hz. Como o SDK
+do BrainLink é proprietário e pode encapsular variantes, essa premissa precisa
+ser confirmada no conjunto físico; a cadência observada passou a integrar cada
+lote e desvios maiores que 15% invalidam as épocas.
 
 **O teto imposto pelas bandas prontas:**
 
@@ -44,8 +48,8 @@ defensável, é **matematicamente inalcançável** sem o sinal bruto.
 ## Decisão
 
 Consumir `CODE_RAW` na camada Android e expô-lo ao Dart. A decisão foi
-implementada com lotes de 128 amostras no `EventChannel`, traçado ao vivo e
-análise descritiva de bandas no Dart.
+implementada com lotes de 512 amostras no `EventChannel`, cadência monotônica
+observada, traçado ao vivo e análise descritiva de bandas no Dart.
 
 Diretrizes de implementação:
 

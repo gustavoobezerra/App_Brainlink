@@ -2,7 +2,7 @@
 titulo: BrainLink Lite — o que o dispositivo entrega
 tags: [hardware/brainlink, evidencia/consolidada]
 status: consolidado
-atualizado: 2026-08-13
+atualizado: 2026-09-30
 ---
 
 # BrainLink Lite
@@ -16,13 +16,15 @@ atualizado: 2026-08-13
 | Canais | **1**, seco, posição **Fp1** (frontopolar esquerdo) |
 | Referência | Clipe no lóbulo da orelha |
 | Saídas | EEG bruto **+** métricas pré-processadas (`RAW + eSense`) |
-| Taxa do EEG bruto | **128 Hz** no Lite v2.0 |
+| Taxa do EEG bruto | **512 Hz esperados no callback `CODE_RAW`**, com verificação em runtime e validação física pendente |
 | Transporte | **Bluetooth Clássico (SPP)** — ver [[sdk-libstreamsdk]] |
 
-O chip TGAT/TGAM emite raw a até 512 Hz em algumas configurações; o Lite v2.0
-opera a 128 Hz. A 128 Hz, a frequência de Nyquist é 64 Hz — suficiente para todo
-o espectro de interesse (delta a gama baixa) e para o ajuste aperiódico na faixa
-2–40 Hz.
+O protocolo oficial distingue duas coisas que antes foram confundidas neste
+vault: `CODE_RAW = 128` é o código decimal de `0x80`, enquanto o raw de 16 bits
+do ASIC TGAT/TGAM é normalmente emitido 512 vezes por segundo. Alguns módulos
+ThinkGear e modos de raw de 8 bits operam a 128 Hz. Como o BrainLink encapsula o
+ASIC por um SDK proprietário, a cadência do exemplar físico continua sendo um
+portão de homologação; o app agora mede e registra o valor observado.
 
 ## O que chega por amostra
 
@@ -37,9 +39,10 @@ o espectro de interesse (delta a gama baixa) e para o ajuste aperiódico na faix
 **Potências de banda** (`EEGPower`, ~1 Hz): `delta`, `theta`, `lowAlpha`,
 `highAlpha`, `lowBeta`, `highBeta`, `lowGamma`, `middleGamma`.
 
-**EEG bruto** (`CODE_RAW = 128`): amostras individuais. O código atual agrupa
-128 amostras por evento, com sequência, perdas e qualidade de contato; o raw
-ainda não alimenta a interface — ver [[ADR-002-consumir-eeg-bruto]].
+**EEG bruto** (`CODE_RAW = 128`, isto é, evento `0x80`): amostras individuais.
+O código atual agrupa 512 amostras por evento, transporta sequência, perdas,
+qualidade de contato e cadência observada, e alimenta traçado e espectro. Ver
+[[ADR-002-consumir-eeg-bruto]].
 
 ## A armadilha das unidades de banda
 

@@ -2,7 +2,7 @@
 titulo: Chip TGAM e protocolo ThinkGear
 tags: [hardware/sdk, metodologia]
 status: consolidado
-atualizado: 2026-08-13
+atualizado: 2026-09-30
 ---
 
 # Chip TGAM e protocolo ThinkGear
@@ -14,8 +14,10 @@ filtragem, digitalização e o cálculo dos índices proprietários. É o mesmo 
 usado no MindWave e na família BrainLink — o que explica por que os dispositivos
 entregam exatamente o mesmo conjunto de campos.
 
-O chip emite raw a até 512 Hz; o BrainLink Lite v2.0 opera a **128 Hz**. Ver
-[[brainlink-lite]].
+O ASIC TGAT/TGAM emite o raw de 16 bits tipicamente a **512 Hz**. O número 128
+em `CODE_RAW = 128` representa o evento hexadecimal `0x80`, não a frequência.
+Módulos ou modos de 8 bits podem operar a 128 Hz. A embalagem BrainLink + SDK
+proprietário exige confirmação no dispositivo físico; ver [[brainlink-lite]].
 
 ## O que trafega
 
@@ -26,8 +28,8 @@ listados em [[sdk-libstreamsdk]]. Dois blocos importam:
 big-endian**, em escala proprietária sem unidade física. É a origem da armadilha
 de unidades descrita em [[brainlink-lite]].
 
-**Raw** — amostras individuais do conversor. Chegam como inteiros de 16 bits
-little-endian a 128 Hz no Lite.
+**Raw** — amostras individuais do conversor. O callback do SDK entrega inteiros
+de 16 bits; o app espera 512 por segundo e mede a cadência real em runtime.
 
 ## Conversão de raw para microvolts
 

@@ -1,13 +1,13 @@
 ---
-titulo: Auditoria do código (agosto/2026)
+titulo: Auditoria do código
 tags: [codigo, auditoria]
 status: consolidado
-atualizado: 2026-08-18
+atualizado: 2026-09-30
 ---
 
 # Auditoria do código
 
-Estado verificado em 18 de agosto de 2026 por leitura do fonte, análise Dart,
+Estado revisto em 30 de setembro de 2026 por leitura do fonte, análise Dart,
 testes Flutter, lint Android, build e inspeção do APK.
 
 ## Produto atual
@@ -32,7 +32,7 @@ oito segundos para ser apresentável sem headset.
 | Interface | fluxo único responsivo, instruções, traçado, indicador, bandas e ASRS |
 | Hardware | descoberta Bluetooth Clássico, conexão e erros expostos ao Flutter |
 | EEG consolidado | snapshot somente após `EEGPOWER` válido; ausência preservada |
-| EEG bruto | `EventChannel` em lotes de 128 amostras com sequência, contato e perdas |
+| EEG bruto | `EventChannel` em lotes de 512 amostras com sequência, contato, perdas e cadência observada |
 | Espectro | FFT de épocas de 1 s, Hann, 50% de sobreposição e rejeição de artefatos |
 | Resultado EEG | qualidade, bandas e estado theta > beta; nunca classifica a pessoa |
 | Resultado ASRS | 0–24; corte 14 comunica possibilidade, calculada sem EEG |

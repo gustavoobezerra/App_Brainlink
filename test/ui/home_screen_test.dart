@@ -6,6 +6,7 @@ import 'package:brainlink_app/data/models/asrs_screener_6.dart';
 import 'package:brainlink_app/data/models/raw_batch.dart';
 import 'package:brainlink_app/ui/screens/home_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -93,7 +94,6 @@ void main() {
     );
     await tester.tap(startButton);
     await tester.pump();
-
     expect(find.text('Mantenha os olhos abertos'), findsOneWidget);
     expect(find.text('EEG bruto ao vivo'), findsOneWidget);
     await tester.pump(const Duration(seconds: 1));
@@ -148,6 +148,7 @@ void main() {
     );
     await tester.tap(screeningButton);
     await tester.pumpAndSettle();
+    await _confirmAdultEligibility(tester);
 
     expect(find.text('Seis perguntas para adultos'), findsOneWidget);
     expect(
@@ -223,6 +224,7 @@ void main() {
     );
     await tester.tap(screeningButton);
     await tester.pumpAndSettle();
+    await _confirmAdultEligibility(tester);
 
     for (var index = 0; index < AsrsScreener6.itemCount; index++) {
       final field = find.byKey(ValueKey('asrs_answer_$index'));
@@ -265,6 +267,7 @@ void main() {
           deviceGateway: _FakeGateway(),
           rawDataStream: rawController.stream,
           hardwarePhaseDuration: const Duration(seconds: 1),
+          signalPrecheckDuration: Duration.zero,
         ),
       ),
     );
@@ -279,26 +282,44 @@ void main() {
     );
     await tester.tap(connectButton);
     await tester.pumpAndSettle();
+    rawController.add(_sineBatch(-1, frequency: 10));
+    await tester.pump();
     final startButton = find.text('Começar teste de 2 minutos');
     await tester.scrollUntilVisible(
       startButton,
       500,
       scrollable: find.byType(Scrollable).first,
     );
+    final enabledStart = tester.widget<FilledButton>(
+      find.ancestor(of: startButton, matching: find.byType(FilledButton)),
+    );
+    expect(enabledStart.onPressed, isNotNull);
     await tester.tap(startButton);
     await tester.pump();
+    expect(find.text('Mantenha os olhos abertos'), findsOneWidget);
 
+    final eyesOpenBase = DateTime.now().add(const Duration(seconds: 1));
     for (var sequence = 0; sequence < 11; sequence++) {
       rawController.add(
-        _sineBatch(sequence, frequency: 10, amplitudeMicrovolts: 5),
+        _sineBatch(
+          sequence,
+          frequency: 10,
+          amplitudeMicrovolts: 5,
+          t0: eyesOpenBase.add(Duration(seconds: sequence)),
+        ),
       );
     }
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('Agora feche os olhos'), findsOneWidget);
 
+    final eyesClosedBase = DateTime.now().add(const Duration(seconds: 1));
     for (var sequence = 11; sequence < 22; sequence++) {
-      rawController.add(_sineBatch(sequence, frequency: 10));
+      rawController.add(_sineBatch(
+        sequence,
+        frequency: 10,
+        t0: eyesClosedBase.add(Duration(seconds: sequence - 11)),
+      ));
     }
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
@@ -319,10 +340,152 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('bloqueia início até confirmar contato estável', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(home: HomeScreen(deviceGateway: _FakeGateway())),
+    );
+    await _connectFakeDevice(tester);
+
+    final startText = find.text('Começar teste de 2 minutos');
+    await tester.scrollUntilVisible(
+      startText,
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    final start = tester.widget<FilledButton>(
+      find.ancestor(of: startText, matching: find.byType(FilledButton)),
+    );
+    expect(start.onPressed, isNull);
+    expect(find.textContaining('Verificando o contato'), findsOneWidget);
+  });
+
+  testWidgets('atualiza contato antes de receber EEG ou amostras brutas',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(home: HomeScreen(deviceGateway: _FakeGateway())),
+    );
+    await _connectFakeDevice(tester);
+    await tester.scrollUntilVisible(
+      find.text('Começar teste de 2 minutos'),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    Future<void> sendContact(int value) async {
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+        'com.brainlink.app/sdk',
+        const StandardMethodCodec()
+            .encodeMethodCall(MethodCall('onSignalQuality', value)),
+        (_) {},
+      );
+      await tester.pump();
+    }
+
+    await sendContact(200);
+    expect(find.textContaining('Contato instável (200/200)'), findsOneWidget);
+    await sendContact(0);
+    expect(find.textContaining('Contato detectado.'), findsOneWidget);
+    await sendContact(200);
+    expect(find.textContaining('Contato instável (200/200)'), findsOneWidget);
+  });
+
+  testWidgets('desconexão invalida a coleta sem gerar resultado',
+      (tester) async {
+    final connection = StreamController<bool>.broadcast();
+    addTearDown(connection.close);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeScreen(
+          deviceGateway: _FakeGateway(),
+          connectionStateStream: connection.stream,
+          signalPrecheckDuration: Duration.zero,
+          hardwarePhaseDuration: const Duration(seconds: 1),
+        ),
+      ),
+    );
+    await _connectFakeDevice(tester);
+    final startText = find.text('Começar teste de 2 minutos');
+    await tester.scrollUntilVisible(
+      startText,
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(startText);
+    await tester.pump();
+    expect(find.text('Mantenha os olhos abertos'), findsOneWidget);
+
+    connection.add(false);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Resultado não gerado'), findsOneWidget);
+    expect(find.textContaining('coleta foi invalidada'), findsOneWidget);
+    expect(find.text('Resultado da coleta'), findsNothing);
+    expect(find.textContaining('Exportar'), findsNothing);
+  });
+
+  testWidgets('encerrar coleta exige confirmação e descarta dados parciais',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: HomeScreen(demonstrationPhaseDuration: Duration(seconds: 5)),
+      ),
+    );
+    await tester.tap(find.text('Ver demonstração'));
+    await tester.pumpAndSettle();
+    final start = find.text('Começar demonstração');
+    await tester.scrollUntilVisible(
+      start,
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(start);
+    await tester.pump();
+    final stop = find.text('Encerrar agora');
+    await tester.scrollUntilVisible(
+      stop,
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(stop);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Encerrar esta coleta?'), findsOneWidget);
+    await tester.tap(find.text('Encerrar e descartar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Resultado não gerado'), findsOneWidget);
+  });
+
+  testWidgets('não gera overflow em tela estreita com texto ampliado',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: MediaQuery(
+          data: MediaQueryData(textScaler: TextScaler.linear(2)),
+          child: HomeScreen(demonstrationPhaseDuration: Duration(seconds: 1)),
+        ),
+      ),
+    );
+    await _reachDemonstrationResult(tester);
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Resultado da coleta'), findsOneWidget);
+  });
 }
 
 Future<void> _reachDemonstrationResult(WidgetTester tester) async {
-  await tester.tap(find.text('Ver demonstração'));
+  final demonstration = find.text('Ver demonstração');
+  await tester.scrollUntilVisible(
+    demonstration,
+    400,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.tap(demonstration);
   await tester.pumpAndSettle();
   final startButton = find.text('Começar demonstração');
   await tester.scrollUntilVisible(
@@ -334,6 +497,25 @@ Future<void> _reachDemonstrationResult(WidgetTester tester) async {
   await tester.pump();
   await tester.pump(const Duration(seconds: 1));
   await tester.pump(const Duration(seconds: 1));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _confirmAdultEligibility(WidgetTester tester) async {
+  expect(find.text('Rastreio destinado a adultos'), findsOneWidget);
+  await tester.tap(find.text('Tenho 18 anos ou mais'));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _connectFakeDevice(WidgetTester tester) async {
+  await tester.tap(find.text('Conectar BrainLink'));
+  await tester.pumpAndSettle();
+  final connect = find.text('Conectar');
+  await tester.scrollUntilVisible(
+    connect,
+    400,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.tap(connect);
   await tester.pumpAndSettle();
 }
 
@@ -352,6 +534,7 @@ RawBatch _sineBatch(
   int sequence, {
   required double frequency,
   double amplitudeMicrovolts = 20,
+  DateTime? t0,
 }) {
   final samples = Int32List(RawBatch.sampleRateHz);
   for (var index = 0; index < samples.length; index++) {
@@ -364,7 +547,7 @@ RawBatch _sineBatch(
   }
   return RawBatch(
     seq: sequence,
-    t0: DateTime.fromMillisecondsSinceEpoch(sequence * 1000),
+    t0: t0 ?? DateTime.now(),
     poorSignal: 0,
     dropped: 0,
     samples: samples,

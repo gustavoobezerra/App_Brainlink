@@ -9,7 +9,7 @@ lotes, evitando 128 serializações por segundo.
 | Tipo | Identificador | Finalidade |
 | --- | --- | --- |
 | `MethodChannel` | `com.brainlink.app/sdk` | comandos e eventos de baixa frequência |
-| `EventChannel` | `com.brainlink.app/raw` | lotes de EEG bruto a 128 Hz |
+| `EventChannel` | `com.brainlink.app/raw` | lotes de EEG bruto de 512 amostras, com cadência observada |
 
 ## Comandos enviados pelo Flutter
 
@@ -35,6 +35,7 @@ e abre o seletor de compartilhamento do Android por `FileProvider`.
 | Evento | Conteúdo |
 | --- | --- |
 | `onEEGData` | mapa com snapshot consolidado das métricas do SDK |
+| `onSignalQuality` | qualidade de contato 0–200, enviada imediatamente em `CODE_POOR_SIGNAL`, independente das potências |
 | `onStatusUpdate` | estado textual da conexão |
 | `onConnectionStateChanged` | estado booleano da conexão |
 | `onDeviceFound` | `{name, address, bonded}` |
@@ -65,7 +66,12 @@ clínicos.
 
 ### Lote de EEG bruto
 
-Cada evento de `com.brainlink.app/raw` representa 128 amostras:
+Cada evento de `com.brainlink.app/raw` representa 512 amostras. No protocolo
+ThinkGear, `CODE_RAW = 128` é o identificador decimal do evento `0x80`, não a
+taxa de amostragem. O ASIC TGAT/TGAM normalmente entrega o raw de 16 bits a
+512 Hz; atenção, meditação, `poorSignal` consolidado e `EEGPOWER` chegam perto
+de 1 Hz. A variante física ainda deve confirmar a cadência em campo, por isso o
+Android mede a taxa observada entre lotes e o analisador rejeita desvios grandes.
 
 | Campo | Tipo | Significado |
 | --- | --- | --- |
@@ -73,6 +79,8 @@ Cada evento de `com.brainlink.app/raw` representa 128 amostras:
 | `t0` | `int` | instante de fechamento do lote no Android, Unix ms |
 | `poorSignal` | `int` | qualidade de contato vigente, 0–200 |
 | `dropped` | `int` | amostras descartadas desde o lote anterior |
+| `sampleRateHz` | `int` | taxa esperada pelo contrato, atualmente 512 Hz |
+| `observedSampleRateHz` | `double?` | cadência calculada pelo relógio monotônico; ausente no primeiro lote |
 | `samples` | `Int32List` | contagens cruas do conversor |
 
 No Dart, `RawBatch.toMicrovolts()` aplica a conversão nominal do ThinkGear

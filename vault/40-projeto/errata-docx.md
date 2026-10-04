@@ -2,7 +2,7 @@
 titulo: Errata do relatório técnico original
 tags: [projeto, auditoria, errata]
 status: consolidado
-atualizado: 2026-08-13
+atualizado: 2026-09-30
 ---
 
 # Errata do relatório técnico original
@@ -55,8 +55,9 @@ O relatório afirma, na seção 2.2, que o SDK entrega `attention`, `meditation`
 `signalQuality` e as oito bandas — e trata essa lista como o teto do dispositivo.
 
 Verificação direta do JAR com `javap` mostra que **`MindDataType.CODE_RAW = 128`
-existe** e chega pelo mesmo `onDataReceived` já implementado. O BrainLink Lite
-v2.0 fornece EEG bruto a 128 Hz. O SDK ainda expõe `startRecordRawData()`,
+existe** e chega pelo mesmo `onDataReceived` já implementado. Esse 128 é o código
+decimal do evento `0x80`, não a taxa. O contrato atual espera 512 callbacks/s e
+mede a cadência real para homologar o BrainLink Lite. O SDK ainda expõe `startRecordRawData()`,
 `stopRecordRawData()` e `setRecordStreamFilePath()`.
 
 A consequência é grande: o relatório trata como impossível o que está a poucas
@@ -75,7 +76,8 @@ na borda superior. Ver [[artefatos-canal-unico]].
 
 O relatório não menciona datasets públicos. Existe um particularmente adequado:
 Nasrabadi et al., com 61 crianças com TDAH e 60 controles, diagnóstico por DSM-IV,
-**a 128 Hz — a mesma taxa do BrainLink Lite — e incluindo o canal Fp1**.
+**a 128 Hz e incluindo o canal Fp1**. A compatibilidade de taxa exige
+reamostragem explícita do raw do aplicativo; não prova equivalência de hardware.
 
 Isso permite testar qualquer índice contra diagnóstico clínico real antes de
 tocar em hardware ou coletar dado de qualquer pessoa. Ver [[datasets-publicos]] e
@@ -100,8 +102,9 @@ camada Flutter" carrega o mesmo equívoco.
 
 O relatório apresenta os resultados do estudo de 2026 como se valessem para o
 dispositivo do projeto. O estudo avaliou o **BrainLink Pro**; o projeto usa o
-**Lite**. Compartilham família de chip e posição de eletrodo, mas diferem na taxa
-de raw (512 Hz vs 128 Hz) e não há garantia de eletrônica idêntica.
+**Lite**. Compartilham família de chip e posição de eletrodo, mas não há garantia
+de eletrônica, firmware, encapsulamento do SDK ou cadência idênticos. O Lite deve
+ser medido diretamente.
 
 Tratar como indicativo, não como medido no Lite. Ver [[validacao-brainlink-pro]].
 

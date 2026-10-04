@@ -10,6 +10,7 @@ void main() {
       't0': 1700000000000,
       'poorSignal': 26,
       'dropped': 0,
+      'observedSampleRateHz': 509.8,
       'samples': Int32List.fromList([0, 100, -100]),
     });
 
@@ -17,6 +18,22 @@ void main() {
     expect(b.samples.length, 3);
     expect(b.poorSignal, 26);
     expect(b.t0.millisecondsSinceEpoch, 1700000000000);
+    expect(b.observedSampleRateHz, closeTo(509.8, 0.01));
+    expect(b.hasExpectedCadence(), isTrue);
+  });
+
+  test('distingue código 0x80 de uma cadência observada de 128 Hz', () {
+    final b = RawBatch.fromMap({
+      'seq': 3,
+      't0': 1700000000000,
+      'poorSignal': 0,
+      'dropped': 0,
+      'observedSampleRateHz': 128,
+      'samples': Int32List(RawBatch.sampleRateHz),
+    });
+
+    expect(RawBatch.sampleRateHz, 512);
+    expect(b.hasExpectedCadence(), isFalse);
   });
 
   test('converte para microvolts pela constante do TGAM', () {

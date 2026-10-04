@@ -25,6 +25,8 @@ class BrainLinkBridge {
   final Logger _logger = const Logger('BrainLinkBridge');
   final StreamController<EEGData> _eegDataController =
       StreamController<EEGData>.broadcast();
+  final StreamController<int> _signalQualityController =
+      StreamController<int>.broadcast();
   final StreamController<bool> _connectionStateController =
       StreamController<bool>.broadcast();
   final StreamController<String> _connectionStatusController =
@@ -39,6 +41,7 @@ class BrainLinkBridge {
   bool _isConnected = false;
 
   Stream<EEGData> get eegDataStream => _eegDataController.stream;
+  Stream<int> get signalQualityStream => _signalQualityController.stream;
 
   Stream<bool> get connectionStateStream => _connectionStateController.stream;
 
@@ -61,6 +64,8 @@ class BrainLinkBridge {
   void _configureNativeCallback() {
     _channel.setMethodCallHandler((call) async {
       switch (call.method) {
+        case 'onSignalQuality':
+          _signalQualityController.add(call.arguments as int);
         case 'onEEGData':
           final data = Map<String, dynamic>.from(call.arguments as Map);
           _eegDataController.add(EEGData.fromMap(data));
@@ -190,6 +195,7 @@ class BrainLinkBridge {
   Future<void> dispose() async {
     await Future.wait([
       _eegDataController.close(),
+      _signalQualityController.close(),
       _connectionStateController.close(),
       _connectionStatusController.close(),
       _errorController.close(),
