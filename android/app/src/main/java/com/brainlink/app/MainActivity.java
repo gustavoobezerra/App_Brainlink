@@ -11,11 +11,19 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.location.LocationManager;
+import android.media.AudioAttributes;
+import android.media.AudioFormat;
+import android.media.AudioManager;
+import android.media.AudioTrack;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.os.VibratorManager;
+import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
 import androidx.core.content.FileProvider;
@@ -33,6 +41,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import io.flutter.embedding.android.FlutterActivity;
 import io.flutter.embedding.engine.FlutterEngine;
@@ -52,6 +62,10 @@ public class MainActivity extends FlutterActivity {
     private static final int DATA_TIMEOUT_MILLIS = 5000;
     private static final int CHECKSUM_ERROR_INTERVAL_MILLIS = 3000;
     private static final String UNKNOWN_DEVICE_NAME = "Dispositivo Bluetooth";
+    private static final int AUDIO_SAMPLE_RATE = 44100;
+    private static final String[] TEST_SOUNDS = {
+            "grave", "agudo", "sino", "sinoDuplo", "bipeCalibracao", "alerta"
+    };
 
     private final Object readerLock = new Object();
     private final Object rawLock = new Object();
@@ -77,6 +91,12 @@ public class MainActivity extends FlutterActivity {
     private long rawSequence;
     private int droppedRawSamples;
     private long previousRawBatchMonotonicMillis;
+
+    // Sons do teste: um AudioTrack estático por som, gerados fora da main thread.
+    private final Object audioLock = new Object();
+    private final Map<String, AudioTrack> audioTracks = new HashMap<>();
+    private final ExecutorService audioExecutor = Executors.newSingleThreadExecutor();
+    private boolean audioDestroyed;
 
     // Escritos pela thread do SDK e lidos pela main thread.
     private volatile Integer currentAttention;
@@ -192,6 +212,36 @@ public class MainActivity extends FlutterActivity {
                 return;
             case "shareFile":
                 shareFile(call, result);
+                return;
+            case "audioPrepare":
+                prepareTestSounds(result);
+                return;
+            case "audioPlay":
+                result.success(playTestSound(call.argument("sound")));
+                return;
+            case "audioRelease":
+                releaseTestSoundsAsync(result);
+                return;
+            case "vibrate":
+                result.success(vibratePattern(call));
+                return;
+            case "setKeepScreenOn":
+                Boolean keepOn = call.argument("on");
+                result.success(setKeepScreenOn(Boolean.TRUE.equals(keepOn)));
+                return;
+            case "getMediaVolume":
+                result.success(readMediaVolume());
+                return;
+            case "monotonicNowNanos":
+                result.success(System.nanoTime());
+                return;
+            case "getPairedDevices":
+                // Só BLUETOOTH_CONNECT: listar os pareados não usa localização.
+                runWithBluetoothPermissions(
+                        false,
+                        result,
+                        () -> listPairedDevices(result)
+                );
                 return;
             default:
                 result.notImplemented();
@@ -618,6 +668,7 @@ public class MainActivity extends FlutterActivity {
         int dropped = 0;
         int poorSignal = 200;
         long timestamp = 0;
+        long monotonicNanos = 0;
         double observedSampleRateHz = 0;
 
         synchronized (rawLock) {
@@ -631,6 +682,8 @@ public class MainActivity extends FlutterActivity {
                 Integer currentPoorSignal = currentSignalQuality;
                 poorSignal = currentPoorSignal == null ? 200 : currentPoorSignal;
                 timestamp = System.currentTimeMillis();
+                // Mesmo relógio dos sons e toques do teste, para alinhar eventos.
+                monotonicNanos = System.nanoTime();
                 long monotonicNow = SystemClock.elapsedRealtime();
                 if (previousRawBatchMonotonicMillis > 0
                         && monotonicNow > previousRawBatchMonotonicMillis) {
@@ -645,6 +698,7 @@ public class MainActivity extends FlutterActivity {
                     completedBatch,
                     sequence,
                     timestamp,
+                    monotonicNanos,
                     poorSignal,
                     dropped,
                     observedSampleRateHz
@@ -656,6 +710,7 @@ public class MainActivity extends FlutterActivity {
             int[] samples,
             long sequence,
             long timestamp,
+            long monotonicNanos,
             int poorSignal,
             int dropped,
             double observedSampleRateHz
@@ -669,6 +724,7 @@ public class MainActivity extends FlutterActivity {
         Map<String, Object> batch = new HashMap<>();
         batch.put("seq", sequence);
         batch.put("t0", timestamp);
+        batch.put("t0MonoNanos", monotonicNanos);
         batch.put("poorSignal", poorSignal);
         batch.put("dropped", dropped);
         batch.put("samples", samples);
@@ -989,6 +1045,404 @@ public class MainActivity extends FlutterActivity {
         discoveryReceiverRegistered = true;
     }
 
+    // ---------------------------------------------------------------------
+    // Teste de atenção: sons, vibração, tela acesa, volume e aparelhos pareados.
+    // ---------------------------------------------------------------------
+
+    /** Gera os sons uma vez, fora da main thread, e responde nela. */
+    private void prepareTestSounds(MethodChannel.Result result) {
+        synchronized (audioLock) {
+            if (audioDestroyed) {
+                result.success(false);
+                return;
+            }
+            if (audioTracks.size() == TEST_SOUNDS.length) {
+                result.success(true);
+                return;
+            }
+        }
+        try {
+            audioExecutor.execute(() -> {
+                boolean prepared = buildTestSounds();
+                postToFlutter(() -> result.success(prepared));
+            });
+        } catch (Exception error) {
+            result.success(false);
+        }
+    }
+
+    private boolean buildTestSounds() {
+        boolean allPrepared = true;
+        for (String sound : TEST_SOUNDS) {
+            synchronized (audioLock) {
+                if (audioDestroyed) {
+                    return false;
+                }
+                if (audioTracks.containsKey(sound)) {
+                    continue;
+                }
+            }
+            AudioTrack track = null;
+            try {
+                short[] pcm = synthesizeTestSound(sound);
+                track = createStaticTrack(pcm);
+            } catch (Exception error) {
+                android.util.Log.w("BrainLinkAudio", "Falha ao gerar " + sound, error);
+            }
+            if (track == null) {
+                allPrepared = false;
+                continue;
+            }
+            synchronized (audioLock) {
+                if (audioDestroyed) {
+                    track.release();
+                    return false;
+                }
+                audioTracks.put(sound, track);
+            }
+        }
+        return allPrepared;
+    }
+
+    /** Um AudioTrack MODE_STATIC já carregado com o PCM, ou nulo se falhar. */
+    private AudioTrack createStaticTrack(short[] pcm) {
+        AudioAttributes attributes = new AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build();
+        AudioFormat format = new AudioFormat.Builder()
+                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                .setSampleRate(AUDIO_SAMPLE_RATE)
+                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                .build();
+        int bytes = pcm.length * 2;
+        AudioTrack track;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            AudioTrack.Builder builder = new AudioTrack.Builder()
+                    .setAudioAttributes(attributes)
+                    .setAudioFormat(format)
+                    .setTransferMode(AudioTrack.MODE_STATIC)
+                    .setBufferSizeInBytes(bytes);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                builder.setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY);
+            }
+            track = builder.build();
+        } else {
+            track = new AudioTrack(
+                    attributes,
+                    format,
+                    bytes,
+                    AudioTrack.MODE_STATIC,
+                    AudioManager.AUDIO_SESSION_ID_GENERATE
+            );
+        }
+        if (track.write(pcm, 0, pcm.length) != pcm.length
+                || track.getState() != AudioTrack.STATE_INITIALIZED) {
+            track.release();
+            return null;
+        }
+        return track;
+    }
+
+    /**
+     * Toca um som preparado e devolve {@code System.nanoTime()} lido logo antes
+     * de {@code play()}; nulo se o som é desconhecido ou não foi preparado.
+     */
+    private Long playTestSound(String sound) {
+        if (sound == null) {
+            return null;
+        }
+        synchronized (audioLock) {
+            AudioTrack track = audioTracks.get(sound);
+            if (track == null || track.getState() != AudioTrack.STATE_INITIALIZED) {
+                return null;
+            }
+            try {
+                track.stop();
+                track.reloadStaticData();
+                long startedAt = System.nanoTime();
+                track.play();
+                return startedAt;
+            } catch (IllegalStateException error) {
+                return null;
+            }
+        }
+    }
+
+    private void releaseTestSoundsAsync(MethodChannel.Result result) {
+        // Pela mesma fila da preparação, para não liberar no meio da geração.
+        try {
+            audioExecutor.execute(() -> {
+                releaseAllTracks();
+                postToFlutter(() -> result.success(true));
+            });
+        } catch (Exception error) {
+            releaseAllTracks();
+            result.success(true);
+        }
+    }
+
+    private void releaseAllTracks() {
+        synchronized (audioLock) {
+            for (AudioTrack track : audioTracks.values()) {
+                try {
+                    track.stop();
+                } catch (IllegalStateException ignored) {
+                    // Já parado ou nunca inicializado.
+                }
+                track.release();
+            }
+            audioTracks.clear();
+        }
+    }
+
+    private void releaseTestSoundsOnDestroy() {
+        synchronized (audioLock) {
+            audioDestroyed = true;
+        }
+        audioExecutor.shutdownNow();
+        releaseAllTracks();
+    }
+
+    /** PCM 16 bits mono a 44,1 kHz de cada som do teste. */
+    private static short[] synthesizeTestSound(String sound) {
+        switch (sound) {
+            case "grave":
+                return synthesizeTone(600, 100, 10, -6);
+            case "agudo":
+                return synthesizeTone(1200, 100, 10, -6);
+            case "sino":
+                return synthesizeBell(new double[] {0}, -9);
+            case "sinoDuplo":
+                return synthesizeBell(new double[] {0, 0.35}, -9);
+            case "bipeCalibracao":
+                return synthesizeTone(880, 120, 15, -9);
+            case "alerta":
+                return synthesizeSweep(660, 440, 400, 40, -12);
+            default:
+                throw new IllegalArgumentException("Som desconhecido: " + sound);
+        }
+    }
+
+    private static double dbfsToAmplitude(double dbfs) {
+        return Math.pow(10, dbfs / 20.0);
+    }
+
+    /** Envelope de rampa cosseno (subida e descida de {@code rampSamples}). */
+    private static double cosineRamp(int index, int total, int rampSamples) {
+        if (rampSamples <= 0) {
+            return 1;
+        }
+        if (index < rampSamples) {
+            return 0.5 * (1 - Math.cos(Math.PI * index / rampSamples));
+        }
+        int fromEnd = total - 1 - index;
+        if (fromEnd < rampSamples) {
+            return 0.5 * (1 - Math.cos(Math.PI * fromEnd / rampSamples));
+        }
+        return 1;
+    }
+
+    private static short[] synthesizeTone(
+            double frequencyHz,
+            int durationMillis,
+            int rampMillis,
+            double dbfs
+    ) {
+        int total = AUDIO_SAMPLE_RATE * durationMillis / 1000;
+        int ramp = AUDIO_SAMPLE_RATE * rampMillis / 1000;
+        double amplitude = dbfsToAmplitude(dbfs);
+        double[] wave = new double[total];
+        for (int i = 0; i < total; i++) {
+            double t = (double) i / AUDIO_SAMPLE_RATE;
+            wave[i] = amplitude * cosineRamp(i, total, ramp)
+                    * Math.sin(2 * Math.PI * frequencyHz * t);
+        }
+        return toPcm16(wave);
+    }
+
+    /** Varredura linear de frequência, com fase contínua. */
+    private static short[] synthesizeSweep(
+            double startHz,
+            double endHz,
+            int durationMillis,
+            int rampMillis,
+            double dbfs
+    ) {
+        int total = AUDIO_SAMPLE_RATE * durationMillis / 1000;
+        int ramp = AUDIO_SAMPLE_RATE * rampMillis / 1000;
+        double amplitude = dbfsToAmplitude(dbfs);
+        double[] wave = new double[total];
+        double phase = 0;
+        for (int i = 0; i < total; i++) {
+            double progress = (double) i / total;
+            double frequency = startHz + (endHz - startHz) * progress;
+            wave[i] = amplitude * cosineRamp(i, total, ramp) * Math.sin(phase);
+            phase += 2 * Math.PI * frequency / AUDIO_SAMPLE_RATE;
+        }
+        return toPcm16(wave);
+    }
+
+    /**
+     * Sino: parciais inarmônicos sobre 784 Hz com ataque de 5 ms e decaimento
+     * exponencial (~1,2 s); os parciais altos morrem antes, como num sino real.
+     * Cada instante em {@code strikesSeconds} é uma batida no mesmo buffer.
+     */
+    private static short[] synthesizeBell(double[] strikesSeconds, double dbfs) {
+        final double fundamentalHz = 784;
+        final double[] ratios = {1.0, 2.0, 2.76, 5.4};
+        final double[] gains = {1.0, 0.6, 0.4, 0.25};
+        final double ringSeconds = 1.2;
+        final double decaySeconds = 0.3;
+        final double attackSeconds = 0.005;
+        final double fadeSeconds = 0.02;
+
+        double lastStrike = strikesSeconds[strikesSeconds.length - 1];
+        int total = (int) Math.round((lastStrike + ringSeconds) * AUDIO_SAMPLE_RATE);
+        double[] wave = new double[total];
+        for (double strike : strikesSeconds) {
+            int offset = (int) Math.round(strike * AUDIO_SAMPLE_RATE);
+            int length = (int) Math.round(ringSeconds * AUDIO_SAMPLE_RATE);
+            for (int i = 0; i < length && offset + i < total; i++) {
+                double t = (double) i / AUDIO_SAMPLE_RATE;
+                double attack = t < attackSeconds
+                        ? 0.5 * (1 - Math.cos(Math.PI * t / attackSeconds))
+                        : 1;
+                double fadeOut = ringSeconds - t < fadeSeconds
+                        ? Math.max(0, (ringSeconds - t) / fadeSeconds)
+                        : 1;
+                double sample = 0;
+                for (int k = 0; k < ratios.length; k++) {
+                    double decay = Math.exp(-t * (1 + 0.8 * k) / decaySeconds);
+                    sample += gains[k] * decay
+                            * Math.sin(2 * Math.PI * fundamentalHz * ratios[k] * t);
+                }
+                wave[offset + i] += attack * fadeOut * sample;
+            }
+        }
+        // Normaliza o pico para o nível pedido.
+        double peak = 0;
+        for (double value : wave) {
+            peak = Math.max(peak, Math.abs(value));
+        }
+        double scale = peak > 0 ? dbfsToAmplitude(dbfs) / peak : 0;
+        for (int i = 0; i < total; i++) {
+            wave[i] *= scale;
+        }
+        return toPcm16(wave);
+    }
+
+    private static short[] toPcm16(double[] wave) {
+        short[] pcm = new short[wave.length];
+        for (int i = 0; i < wave.length; i++) {
+            double clamped = Math.max(-1, Math.min(1, wave[i]));
+            pcm[i] = (short) Math.round(clamped * Short.MAX_VALUE);
+        }
+        return pcm;
+    }
+
+    /** Vibra uma vez o padrão {timings (ms), amplitudes (0–255)}. */
+    private boolean vibratePattern(MethodCall call) {
+        List<Number> timingList = call.argument("timings");
+        List<Number> amplitudeList = call.argument("amplitudes");
+        if (timingList == null || timingList.isEmpty()) {
+            return false;
+        }
+        long[] timings = new long[timingList.size()];
+        for (int i = 0; i < timings.length; i++) {
+            Number value = timingList.get(i);
+            timings[i] = value == null ? 0 : Math.max(0, value.longValue());
+        }
+        int[] amplitudes = null;
+        if (amplitudeList != null && amplitudeList.size() == timings.length) {
+            amplitudes = new int[timings.length];
+            for (int i = 0; i < amplitudes.length; i++) {
+                Number value = amplitudeList.get(i);
+                amplitudes[i] = value == null
+                        ? 0
+                        : Math.max(0, Math.min(255, value.intValue()));
+            }
+        }
+
+        Vibrator vibrator;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            VibratorManager manager = getSystemService(VibratorManager.class);
+            vibrator = manager == null ? null : manager.getDefaultVibrator();
+        } else {
+            vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+        }
+        if (vibrator == null || !vibrator.hasVibrator()) {
+            return false;
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                VibrationEffect effect = amplitudes != null && vibrator.hasAmplitudeControl()
+                        ? VibrationEffect.createWaveform(timings, amplitudes, -1)
+                        : VibrationEffect.createWaveform(timings, -1);
+                vibrator.vibrate(effect);
+            } else {
+                vibrator.vibrate(timings, -1);
+            }
+            return true;
+        } catch (Exception error) {
+            return false;
+        }
+    }
+
+    private boolean setKeepScreenOn(boolean on) {
+        runOnUiThread(() -> {
+            if (on) {
+                getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            } else {
+                getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            }
+        });
+        return true;
+    }
+
+    private Map<String, Object> readMediaVolume() {
+        AudioManager manager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        if (manager == null) {
+            return null;
+        }
+        Map<String, Object> volume = new HashMap<>();
+        volume.put("current", manager.getStreamVolume(AudioManager.STREAM_MUSIC));
+        volume.put("max", manager.getStreamMaxVolume(AudioManager.STREAM_MUSIC));
+        return volume;
+    }
+
+    /** Aparelhos já pareados, sem descoberta (e portanto sem localização). */
+    private void listPairedDevices(MethodChannel.Result result) {
+        List<Map<String, Object>> devices = new ArrayList<>();
+        if (bluetoothAdapter == null) {
+            result.success(devices);
+            return;
+        }
+        try {
+            for (BluetoothDevice device : bluetoothAdapter.getBondedDevices()) {
+                String address = device.getAddress();
+                if (address == null) {
+                    continue;
+                }
+                String reported = device.getName();
+                Map<String, Object> payload = new HashMap<>();
+                payload.put("name", reported == null || reported.trim().isEmpty()
+                        ? UNKNOWN_DEVICE_NAME
+                        : reported.trim());
+                payload.put("address", address);
+                payload.put("bonded", true);
+                devices.add(payload);
+            }
+            result.success(devices);
+        } catch (SecurityException error) {
+            result.error(
+                    "BLUETOOTH_PERMISSION_DENIED",
+                    "Permissão insuficiente para listar os aparelhos pareados.",
+                    null
+            );
+        }
+    }
+
     private String safeMessage(Exception error) {
         String message = error.getMessage();
         return message == null || message.trim().isEmpty()
@@ -1013,6 +1467,7 @@ public class MainActivity extends FlutterActivity {
             discoveryReceiverRegistered = false;
         }
         disconnectFromDevice(false);
+        releaseTestSoundsOnDestroy();
 
         EventChannel.EventSink sink = rawEventSink;
         rawEventSink = null;
