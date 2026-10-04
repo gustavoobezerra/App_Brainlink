@@ -143,6 +143,7 @@ class QuadroPiscadas extends StatelessWidget {
             ],
           ),
           Semantics(
+            container: true,
             label: '$detectadas de $total piscadas detectadas',
             child: ExcludeSemantics(
               child: LinhaTeste(

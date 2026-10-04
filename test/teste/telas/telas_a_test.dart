@@ -151,7 +151,11 @@ void main() {
     testWidgets('rola em tela pequena', (tester) async {
       await capturarTela(tester, _inicio(_Registro()), 'inicio-pequena',
           tamanho: _pequena);
-      await tester.scrollUntilVisible(find.text('Abrir coleta anterior'), 100);
+      await tester.scrollUntilVisible(
+        find.text('Abrir coleta anterior'),
+        100,
+        scrollable: find.byType(Scrollable).first,
+      );
     });
   });
 
@@ -285,7 +289,11 @@ void main() {
       for (final c in CenarioSimulado.values) {
         expect(find.text(c.rotulo), findsOneWidget);
       }
-      await tester.scrollUntilVisible(find.text('Fechar'), 100);
+      await tester.scrollUntilVisible(
+        find.text('Fechar'),
+        100,
+        scrollable: find.byType(Scrollable).last,
+      );
       await tester.tap(find.text('Perda de contato'));
       await tester.pump();
       await tester.tap(find.text('Usar dados simulados'));
@@ -299,7 +307,11 @@ void main() {
           tamanho: _pequena);
       expect(find.text('Procurando…'), findsOneWidget);
       expect(find.text('Nenhum aparelho encontrado.'), findsNothing);
-      await tester.scrollUntilVisible(find.text('Usar dados simulados'), 100);
+      await tester.scrollUntilVisible(
+        find.text('Usar dados simulados'),
+        100,
+        scrollable: find.byType(Scrollable).last,
+      );
       await tester.tap(find.text('Usar dados simulados'));
       expect(r.chamadas, ['simulados:tudoCerto']);
     });
