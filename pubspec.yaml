@@ -17,3 +17,22 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # Atkinson Hyperlegible Next e Mono (SIL Open Font License 1.1, ver
+  # assets/fonts/OFL.txt). São arquivos de fonte, não pacotes: o projeto
+  # continua sem dependências além do Flutter.
+  fonts:
+    - family: Atkinson Hyperlegible Next
+      fonts:
+        - asset: assets/fonts/AtkinsonHyperlegibleNext-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/AtkinsonHyperlegibleNext-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/AtkinsonHyperlegibleNext-Bold.ttf
+          weight: 700
+    - family: Atkinson Hyperlegible Mono
+      fonts:
+        - asset: assets/fonts/AtkinsonHyperlegibleMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/AtkinsonHyperlegibleMono-Medium.ttf
+          weight: 500

@@ -13,6 +13,7 @@ class RawBatch {
     required this.dropped,
     required this.samples,
     this.observedSampleRateHz,
+    this.t0MonoNanos,
   });
 
   /// Sequencial do lote, reiniciado a cada conexão.
@@ -48,6 +49,15 @@ class RawBatch {
   /// configurações de hardware incompatíveis antes de calcular o espectro.
   final double? observedSampleRateHz;
 
+  /// Instante do fechamento do lote no relógio monotônico do Android
+  /// (`System.nanoTime()`), em nanossegundos. Ausente em dados legados.
+  ///
+  /// É a mesma base de tempo dos toques na tela e do início dos sons da
+  /// tarefa, o que permite alinhar estímulos, toques e EEG. A amostra `i` de
+  /// um lote completo fica em `t0MonoNanos − (n − 1 − i) · 10⁹ / 512`, com o
+  /// mesmo jitter de dezenas de milissegundos descrito em [t0].
+  final int? t0MonoNanos;
+
   /// Taxa do EEG bruto, em hertz.
   ///
   /// O chip TGAM do BrainLink Lite amostra a 512 Hz e é isso que governa o
@@ -79,6 +89,7 @@ class RawBatch {
       poorSignal: (map['poorSignal'] as num?)?.toInt() ?? 200,
       dropped: (map['dropped'] as num?)?.toInt() ?? 0,
       observedSampleRateHz: (map['observedSampleRateHz'] as num?)?.toDouble(),
+      t0MonoNanos: (map['t0MonoNanos'] as num?)?.toInt(),
       samples: raw is Int32List
           ? raw
           : Int32List.fromList(
