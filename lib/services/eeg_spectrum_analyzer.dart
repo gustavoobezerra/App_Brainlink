@@ -178,7 +178,41 @@ class EegSpectrumAnalyzer {
     );
   }
 
-  EegPhaseSpectrum _analyzePhase(List<RawBatch> batches) {
+  /// Analisa um único trecho com as mesmas regras de rejeição de [analyze].
+  ///
+  /// [excludedSamples], quando presente, tem uma posição por amostra na ordem
+  /// dos lotes; toda época que contém amostra excluída é rejeitada (usado para
+  /// recortar janelas de tempo e remover piscadas).
+  EegPhaseSpectrum analyzeSegment(
+    List<RawBatch> batches, {
+    List<bool>? excludedSamples,
+  }) {
+    if (!_isPowerOfTwo(epochSamples)) {
+      throw StateError('epochSamples precisa ser uma potência de dois.');
+    }
+    if (hopSamples <= 0 || hopSamples > epochSamples) {
+      throw StateError('hopSamples precisa estar entre 1 e epochSamples.');
+    }
+    if (excludedSamples != null) {
+      var total = 0;
+      for (final batch in batches) {
+        total += batch.samples.length;
+      }
+      if (excludedSamples.length != total) {
+        throw ArgumentError.value(
+          excludedSamples.length,
+          'excludedSamples',
+          'precisa ter uma posição por amostra ($total)',
+        );
+      }
+    }
+    return _analyzePhase(batches, excludedSamples);
+  }
+
+  EegPhaseSpectrum _analyzePhase(
+    List<RawBatch> batches, [
+    List<bool>? excludedSamples,
+  ]) {
     final flattened = _flatten(batches);
     if (flattened.samples.length < epochSamples) {
       return const EegPhaseSpectrum(
@@ -200,7 +234,9 @@ class EegSpectrumAnalyzer {
     for (var start = 0;
         start + epochSamples <= flattened.samples.length;
         start += hopSamples) {
-      if (!_allValid(flattened.valid, start, epochSamples)) {
+      if (!_allValid(flattened.valid, start, epochSamples) ||
+          (excludedSamples != null &&
+              _anyExcluded(excludedSamples, start, epochSamples))) {
         rejected++;
         continue;
       }
@@ -426,6 +462,13 @@ class EegSpectrumAnalyzer {
       if (!values[index]) return false;
     }
     return true;
+  }
+
+  static bool _anyExcluded(List<bool> excluded, int start, int length) {
+    for (var index = start; index < start + length; index++) {
+      if (excluded[index]) return true;
+    }
+    return false;
   }
 
   static bool _isSaturated(int value) {
