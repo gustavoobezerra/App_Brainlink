@@ -1,7 +1,7 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../../data/models/sessao_teste.dart';
+import '../tema/icones.dart';
 import '../tema/svg_figura.dart';
 import '../tema/tema_teste.dart';
 import 'pagina_teste.dart';
@@ -292,6 +292,58 @@ class AreaToque extends StatelessWidget {
       );
 }
 
-/// Atalho para o `kPrimaryButton`, para filtrar toques de mouse secundário.
-bool toquePrimario(PointerDownEvent evento) =>
-    evento.kind != PointerDeviceKind.mouse || evento.buttons == kPrimaryButton;
+/// Linha "Teste pausado" com o ícone de pausa (15 px, texto suave), no topo
+/// das telas de pausa.
+class LinhaTestePausado extends StatelessWidget {
+  const LinhaTestePausado({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = TemaTeste.of(context);
+    return LinhaTeste(
+      espaco: 10,
+      children: [
+        IconeSvg(IconesTeste.pausa, tamanho: 18, cor: cores.textoSuave),
+        Flexible(
+          child: Text(
+            'Teste pausado',
+            style: TipografiaTeste.next(15, cor: cores.textoSuave),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Estímulo da versão visual numa caixa quadrada fixa (para não deslocar o
+/// resto da tela): cruz de fixação de 20, figura de 120 ou nada.
+class FiguraEstimulo extends StatelessWidget {
+  const FiguraEstimulo(this.estimulo, {super.key, required this.caixa});
+
+  final EstimuloVisual estimulo;
+
+  /// Lado da caixa.
+  final double caixa;
+
+  @override
+  Widget build(BuildContext context) {
+    final FiguraSvg? figura = switch (estimulo) {
+      EstimuloVisual.nenhum => null,
+      EstimuloVisual.fixacao => IconesTeste.cruzFixacao,
+      EstimuloVisual.comum => IconesTeste.barcoComum,
+      EstimuloVisual.raro => IconesTeste.barcoPirata,
+    };
+    return SizedBox(
+      width: caixa,
+      height: caixa,
+      child: Center(
+        child: figura == null
+            ? null
+            : IconeSvg(
+                figura,
+                tamanho: estimulo == EstimuloVisual.fixacao ? 20 : 120,
+              ),
+      ),
+    );
+  }
+}

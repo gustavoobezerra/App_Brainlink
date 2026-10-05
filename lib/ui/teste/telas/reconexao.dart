@@ -40,22 +40,7 @@ class TelaReconexao extends StatelessWidget {
           return PaginaTeste(
             espaco: 22,
             children: [
-              LinhaTeste(
-                espaco: 10,
-                children: [
-                  IconeSvg(
-                    IconesTeste.pausa,
-                    tamanho: 18,
-                    cor: cores.textoSuave,
-                  ),
-                  Flexible(
-                    child: Text(
-                      'Teste pausado',
-                      style: TipografiaTeste.next(15, cor: cores.textoSuave),
-                    ),
-                  ),
-                ],
-              ),
+              const LinhaTestePausado(),
               Expanded(
                 child: ColunaTeste(
                   espaco: 22,

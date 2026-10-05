@@ -1,5 +1,3 @@
-import 'package:flutter/widgets.dart';
-
 import 'svg_figura.dart';
 import 'tema_teste.dart';
 
@@ -208,19 +206,16 @@ abstract final class IconesTeste {
     ],
   );
 
-  /// Anel completo do botão "Segure 2 s para encerrar".
-  static const FiguraSvg anel = FiguraSvg(
-    largura: 24,
-    altura: 24,
-    preenchimento: PinturaSvg.nenhuma,
-    traco: PinturaSvg.atual,
-    espessura: 2,
-    pontaRedonda: true,
-    elementos: [CirculoSvg(12, 12, 9)],
-  );
-
   /// Cabeça com o sensor na testa e o clipe na orelha (`viewBox 200 × 170`).
-  static FiguraSvg cabecaSensor(CoresTeste cores) => FiguraSvg(
+  ///
+  /// Guardada por paleta (uma por tema): a mesma instância evita que o
+  /// `PintorSvg` redesenhe a cada reconstrução.
+  static FiguraSvg cabecaSensor(CoresTeste cores) =>
+      _cabecasSensor.putIfAbsent(cores, () => _cabecaSensor(cores));
+
+  static final Map<CoresTeste, FiguraSvg> _cabecasSensor = Map.identity();
+
+  static FiguraSvg _cabecaSensor(CoresTeste cores) => FiguraSvg(
         largura: 200,
         altura: 170,
         preenchimento: PinturaSvg.nenhuma,
@@ -268,16 +263,3 @@ abstract final class IconesTeste {
         ],
       );
 }
-
-/// Atalho para ícones de linha com cor e tamanho do design.
-Widget iconeTeste(
-  FiguraSvg figura, {
-  required double tamanho,
-  Color? cor,
-  double? espessura,
-}) =>
-    IconeSvg(
-      espessura == null ? figura : figura.comEspessura(espessura),
-      tamanho: tamanho,
-      cor: cor,
-    );

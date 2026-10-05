@@ -62,6 +62,41 @@ Resultados separados → exportar ou repetir
 - Os resultados podem ser exportados em HTML e TXT e compartilhados pelo
   Android.
 
+## Teste de atenção (tela inicial)
+
+O app abre no teste de atenção desenhado em `docs/design/brainlink-telas-testes.zip`
+(brief em `docs/design/BRIEF-TELAS-TESTES-2026-10-04.md`, protocolo do ADR-005):
+
+```text
+Início (auditivo ou visual, código, modo demonstração)
+        ↓  (versão auditiva com volume baixo: "Aumente o volume")
+Coloque o sensor → contato bom estável por 10 s
+        ↓
+Instruções → calibração de piscadas (5 bipes, 20 s)
+        ↓
+Repouso de olhos fechados (1 min) → instruções e treino (10)
+        ↓
+Tarefa (3 min: toca no grave/barco, não toca no agudo/pirata)
+        ↓
+"Toque no ritmo" (1 min) → repouso final (40 s)
+        ↓
+ASRS-6 (uma pergunta por tela) → contexto do dia
+        ↓
+Fim (pesquisa) ou resultados descritivos (demonstração)
+```
+
+- Sons e vibração marcam as fases (um sino: fechar os olhos; dois sinos:
+  abrir). A tela fica acesa durante o teste.
+- Contato perdido pausa a fase (retomar ou recomeçar); queda do Bluetooth
+  tenta reconectar até 5 vezes. Voltar, ou segurar 2 s o botão discreto, abre
+  a confirmação de saída.
+- Sem headset, a lista de aparelhos oferece **Usar dados simulados**, com
+  tempos encurtados e cenários para ver as telas de erro. A simulação sempre
+  aparece identificada como "Dados simulados".
+- Nada é gravado em disco nesta versão: a sessão fica em memória.
+- A coleta guiada anterior continua disponível pelo link **Abrir coleta
+  anterior**, no rodapé do início.
+
 ## Usar com o BrainLink
 
 1. Carregue e ligue o BrainLink.

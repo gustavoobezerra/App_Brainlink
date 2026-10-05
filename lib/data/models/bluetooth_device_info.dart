@@ -1,3 +1,9 @@
+/// Indica se [nome] é de um headset BrainLink. Os aparelhos anunciam
+/// `BrainLink_Lite` e `BrainLink_pro`; a comparação ignora maiúsculas,
+/// espaços, `_` e `-`.
+bool ehNomeBrainLink(String nome) =>
+    nome.toLowerCase().replaceAll(RegExp(r'[\s_-]'), '').contains('brainlink');
+
 /// Dispositivo encontrado pela descoberta Bluetooth Clássico do Android.
 class BluetoothDeviceInfo {
   const BluetoothDeviceInfo({

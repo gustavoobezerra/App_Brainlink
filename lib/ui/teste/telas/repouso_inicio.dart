@@ -34,91 +34,63 @@ class TelaRepousoInicio extends StatelessWidget {
               altura: 1.3,
               cor: cores.texto,
             );
-            return _alturaNormal(
-              context,
-              PaginaTeste(
-                children: [
-                  CabecalhoEtapa(
-                    etapa: repousoFinal ? 6 : 3,
-                    rotulo: repousoFinal ? 'Repouso final' : 'Repouso',
-                    acao: BotaoSegurar.pilula(aoConcluir: aoSegurarEncerrar),
+            return PaginaTeste(
+              children: [
+                CabecalhoEtapa(
+                  etapa: repousoFinal ? 6 : 3,
+                  rotulo: repousoFinal ? 'Repouso final' : 'Repouso',
+                  acao: BotaoSegurar.pilula(aoConcluir: aoSegurarEncerrar),
+                ),
+                Expanded(
+                  child: ColunaTeste(
+                    espaco: 28,
+                    principal: MainAxisAlignment.center,
+                    children: [
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: CirculoIcone(
+                          figura: IconesTeste.olhosFechados,
+                          tamanhoIcone: 36,
+                        ),
+                      ),
+                      Semantics(
+                        header: true,
+                        child: Text.rich(
+                          TextSpan(
+                            style: titulo,
+                            children: [
+                              TextSpan(
+                                text: repousoFinal
+                                    ? 'Último repouso. Feche os olhos até ouvir '
+                                    : 'Agora feche os olhos e fique relaxado '
+                                        'até ouvir ',
+                              ),
+                              TextSpan(
+                                text: 'dois bipes',
+                                style: TextStyle(color: cores.acentoDestaque),
+                              ),
+                              const TextSpan(text: '.'),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Text(
+                        repousoFinal
+                            ? 'Duração: 40 segundos.'
+                            : 'Duração: 1 minuto. Você não precisa fazer nada.',
+                        style: TipografiaTeste.next(
+                          18,
+                          altura: 1.45,
+                          cor: cores.textoSecundario,
+                        ),
+                      ),
+                    ],
                   ),
-                  Expanded(
-                    child: ColunaTeste(
-                      espaco: 28,
-                      principal: MainAxisAlignment.center,
-                      children: [
-                        const Align(
-                          alignment: Alignment.centerLeft,
-                          child: CirculoIcone(
-                            figura: IconesTeste.olhosFechados,
-                            tamanhoIcone: 36,
-                          ),
-                        ),
-                        Semantics(
-                          header: true,
-                          child: Text.rich(
-                            TextSpan(
-                              style: titulo,
-                              children: [
-                                TextSpan(
-                                  text: repousoFinal
-                                      ? 'Último repouso. Feche os olhos até ouvir '
-                                      : 'Agora feche os olhos e fique relaxado '
-                                          'até ouvir ',
-                                ),
-                                TextSpan(
-                                  text: 'dois bipes',
-                                  style: TextStyle(color: cores.acentoDestaque),
-                                ),
-                                const TextSpan(text: '.'),
-                              ],
-                            ),
-                          ),
-                        ),
-                        Text(
-                          repousoFinal
-                              ? 'Duração: 40 segundos.'
-                              : 'Duração: 1 minuto. Você não precisa fazer nada.',
-                          style: TipografiaTeste.next(
-                            18,
-                            altura: 1.45,
-                            cor: cores.textoSecundario,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  BotaoTeste(texto: 'Começar repouso', aoTocar: aoComecar),
-                ],
-              ),
+                ),
+                BotaoTeste(texto: 'Começar repouso', aoTocar: aoComecar),
+              ],
             );
           },
         ),
       );
-}
-
-/// O `line-height: normal` do navegador vale 1,3 nesta fonte; o tema do
-/// Material herda 1,43 do `bodyMedium`, então a tela fixa 1,3 como padrão,
-/// com a sobra da entrelinha dividida igualmente (como no CSS).
-Widget _alturaNormal(BuildContext context, Widget filho) {
-  final tema = Theme.of(context);
-  final corpo = tema.textTheme.bodyMedium ?? const TextStyle();
-  return Theme(
-    data: tema.copyWith(
-      textTheme: tema.textTheme.copyWith(
-        bodyMedium: corpo.copyWith(
-          height: 1.3,
-          leadingDistribution: TextLeadingDistribution.even,
-        ),
-      ),
-    ),
-    child: DefaultTextStyle.merge(
-      style: const TextStyle(
-        height: 1.3,
-        leadingDistribution: TextLeadingDistribution.even,
-      ),
-      child: filho,
-    ),
-  );
 }

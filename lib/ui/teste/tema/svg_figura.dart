@@ -245,7 +245,7 @@ class PintorSvg extends CustomPainter {
       if (corTraco != null && espessura > 0) {
         final tracejado = elemento.tracejado;
         canvas.drawPath(
-          tracejado == null ? path : _tracejar(path, tracejado),
+          tracejado == null ? path : tracejar(path, tracejado),
           Paint()
             ..isAntiAlias = true
             ..style = PaintingStyle.stroke
@@ -260,32 +260,35 @@ class PintorSvg extends CustomPainter {
     canvas.restore();
   }
 
-  static Path _tracejar(Path origem, List<double> padrao) {
-    final resultado = Path();
-    if (padrao.isEmpty || padrao.every((v) => v <= 0)) return origem;
-    for (final metrica in origem.computeMetrics()) {
-      var distancia = 0.0;
-      var indice = 0;
-      var desenhar = true;
-      while (distancia < metrica.length) {
-        final comprimento = padrao[indice % padrao.length];
-        final fim = math.min(distancia + comprimento, metrica.length);
-        if (desenhar) {
-          resultado.addPath(metrica.extractPath(distancia, fim), Offset.zero);
-        }
-        distancia += comprimento;
-        desenhar = !desenhar;
-        indice++;
-      }
-    }
-    return resultado;
-  }
-
   @override
   bool shouldRepaint(PintorSvg oldDelegate) =>
       oldDelegate.figura != figura ||
       oldDelegate.corAtual != corAtual ||
       oldDelegate.esticar != esticar;
+}
+
+/// Divide [origem] em traços, como o `stroke-dasharray` do SVG: [padrao]
+/// alterna comprimentos de traço e de vão, repetidos ao longo de cada
+/// contorno. Um padrão vazio (ou só de zeros) devolve o caminho original.
+Path tracejar(Path origem, List<double> padrao) {
+  final resultado = Path();
+  if (padrao.isEmpty || padrao.every((v) => v <= 0)) return origem;
+  for (final metrica in origem.computeMetrics()) {
+    var distancia = 0.0;
+    var indice = 0;
+    var desenhar = true;
+    while (distancia < metrica.length) {
+      final comprimento = padrao[indice % padrao.length];
+      final fim = math.min(distancia + comprimento, metrica.length);
+      if (desenhar) {
+        resultado.addPath(metrica.extractPath(distancia, fim), Offset.zero);
+      }
+      distancia += comprimento;
+      desenhar = !desenhar;
+      indice++;
+    }
+  }
+  return resultado;
 }
 
 /// Ícone SVG decorativo (equivalente a `aria-hidden="true"`).

@@ -23,7 +23,7 @@ class TelaCalibracaoResultado extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => TemaTeste(
-        child: _TextoCss(child: Builder(
+        child: Builder(
           builder: (context) {
             final cores = TemaTeste.of(context);
             return PaginaTeste(
@@ -63,28 +63,25 @@ class TelaCalibracaoResultado extends StatelessWidget {
                 ),
                 QuadroPiscadas(
                   porBipe: porBipe,
-                  rodape: Align(
-                    alignment: Alignment.centerLeft,
-                    child: BotaoTeste(
-                      texto: 'Repetir calibração',
-                      aoTocar: aoRepetir,
-                      estilo: EstiloBotao.link,
-                      tamanhoTexto: 16,
-                      peso: FontWeight.w400,
-                      altura: 44,
-                      icone: IconesTeste.repetir,
-                      tamanhoIcone: 18,
-                      espacoIcone: 8,
-                      preenchimentoHorizontal: 4,
-                      alinhamento: MainAxisAlignment.start,
-                    ),
+                  rodape: BotaoTeste(
+                    texto: 'Repetir calibração',
+                    aoTocar: aoRepetir,
+                    estilo: EstiloBotao.link,
+                    tamanhoTexto: 16,
+                    peso: FontWeight.w400,
+                    altura: 44,
+                    icone: IconesTeste.repetir,
+                    tamanhoIcone: 18,
+                    espacoIcone: 8,
+                    preenchimentoHorizontal: 4,
+                    alinhamento: MainAxisAlignment.start,
                   ),
                 ),
                 BotaoTeste(texto: 'Continuar', aoTocar: aoContinuar),
               ],
             );
           },
-        )),
+        ),
       );
 }
 
@@ -168,32 +165,6 @@ class QuadroPiscadas extends StatelessWidget {
           if (rodape != null) rodape!,
         ],
       ),
-    );
-  }
-}
-
-/// O `line-height: normal` do navegador vale 1,3 nesta fonte, sem
-/// espaçamento extra; o tema do Material herdaria 1,43 e 0,25 do
-/// `bodyMedium`. Fixa os valores do CSS, com a entrelinha dividida igualmente.
-class _TextoCss extends StatelessWidget {
-  const _TextoCss({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final tema = Theme.of(context);
-    const css = TextStyle(
-      height: 1.3,
-      letterSpacing: 0,
-      leadingDistribution: TextLeadingDistribution.even,
-    );
-    final corpo = (tema.textTheme.bodyMedium ?? const TextStyle()).merge(css);
-    return Theme(
-      data: tema.copyWith(
-        textTheme: tema.textTheme.copyWith(bodyMedium: corpo),
-      ),
-      child: DefaultTextStyle.merge(style: css, child: child),
     );
   }
 }

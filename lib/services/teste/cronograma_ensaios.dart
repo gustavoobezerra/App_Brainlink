@@ -75,19 +75,14 @@ List<Ensaio> gerarRitmo({
   Duration intervaloMaximo = const Duration(milliseconds: 1300),
 }) {
   if (quantidade < 0) throw ArgumentError.value(quantidade, 'quantidade');
-  _validarIntervalos(intervaloMinimo, intervaloMaximo);
-  return [
-    for (var i = 0; i < quantidade; i++)
-      Ensaio(
-        indice: i,
-        tipo: TipoEstimulo.comum,
-        intervaloMs: _sortearIntervalo(
-          aleatorio,
-          intervaloMinimo,
-          intervaloMaximo,
-        ),
-      ),
-  ];
+  return gerarCronograma(
+    comuns: quantidade,
+    raros: 0,
+    aleatorio: aleatorio,
+    primeirosComuns: quantidade,
+    intervaloMinimo: intervaloMinimo,
+    intervaloMaximo: intervaloMaximo,
+  );
 }
 
 void _validarIntervalos(Duration minimo, Duration maximo) {

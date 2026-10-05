@@ -50,17 +50,23 @@ class DetectorPiscadas {
   final ConfiguracaoPiscadas configuracao;
   final double taxaHz;
 
+  /// Filtros já projetados, por (frequência baixa, frequência alta, taxa).
+  static final Map<(double, double, double), CoeficientesFiltro> _filtros = {};
+
   /// Índices (amostras) dos picos de piscada em [microvolts].
   ///
   /// Sinal mais curto que o preenchimento do `filtfilt` (16 amostras) devolve
   /// lista vazia.
   List<int> detectar(List<double> microvolts) {
     final c = configuracao;
-    final filtro = butterworthPassaBanda(
-      2,
-      c.frequenciaBaixaHz,
-      c.frequenciaAltaHz,
-      taxaHz,
+    final filtro = _filtros.putIfAbsent(
+      (c.frequenciaBaixaHz, c.frequenciaAltaHz, taxaHz),
+      () => butterworthPassaBanda(
+        2,
+        c.frequenciaBaixaHz,
+        c.frequenciaAltaHz,
+        taxaHz,
+      ),
     );
     final preenchimento =
         3 * math.max(filtro.a.length, filtro.b.length).toInt();
@@ -177,17 +183,14 @@ CoeficientesFiltro butterworthPassaBanda(
   ];
 
   // lp2bp_zpk: cada polo vira dois; ordem zeros na origem.
-  final polos = <_Complexo>[];
-  for (final p in polosPb) {
-    final escalado = p * (banda / 2);
-    final raiz = (escalado * escalado - _Complexo(centro * centro, 0)).sqrt();
-    polos.add(escalado + raiz);
-  }
-  for (final p in polosPb) {
-    final escalado = p * (banda / 2);
-    final raiz = (escalado * escalado - _Complexo(centro * centro, 0)).sqrt();
-    polos.add(escalado - raiz);
-  }
+  final escalados = [for (final p in polosPb) p * (banda / 2)];
+  final raizes = [
+    for (final e in escalados) (e * e - _Complexo(centro * centro, 0)).sqrt(),
+  ];
+  final polos = <_Complexo>[
+    for (var k = 0; k < escalados.length; k++) escalados[k] + raizes[k],
+    for (var k = 0; k < escalados.length; k++) escalados[k] - raizes[k],
+  ];
   final zeros = List<_Complexo>.filled(ordem, const _Complexo(0, 0));
   var ganho = math.pow(banda, ordem).toDouble();
 
@@ -326,8 +329,12 @@ List<int> encontrarPicos(
 
   // Distância: os maiores primeiro eliminam vizinhos próximos.
   if (distancia > 1 && picos.length > 1) {
-    final ordem = List<int>.generate(picos.length, (k) => k);
-    _ordenarEstavel(ordem, (p, q) => x[picos[p]].compareTo(x[picos[q]]));
+    // Crescente por altura; empates mantêm a ordem dos picos (estável).
+    final ordem = List<int>.generate(picos.length, (k) => k)
+      ..sort((p, q) {
+        final porAltura = x[picos[p]].compareTo(x[picos[q]]);
+        return porAltura != 0 ? porAltura : p.compareTo(q);
+      });
     final manter = List<bool>.filled(picos.length, true);
     for (var r = ordem.length - 1; r >= 0; r--) {
       final j = ordem[r];
@@ -397,29 +404,6 @@ List<int> encontrarPicos(
     selecionados.add(pico);
   }
   return selecionados;
-}
-
-void _ordenarEstavel(List<int> lista, int Function(int, int) comparar) {
-  // Ordenação por inserção binária seria suficiente; merge sort mantém O(n log n).
-  if (lista.length < 2) return;
-  final meio = lista.length ~/ 2;
-  final esquerda = lista.sublist(0, meio);
-  final direita = lista.sublist(meio);
-  _ordenarEstavel(esquerda, comparar);
-  _ordenarEstavel(direita, comparar);
-  var i = 0;
-  var j = 0;
-  var k = 0;
-  while (i < esquerda.length && j < direita.length) {
-    lista[k++] =
-        comparar(direita[j], esquerda[i]) < 0 ? direita[j++] : esquerda[i++];
-  }
-  while (i < esquerda.length) {
-    lista[k++] = esquerda[i++];
-  }
-  while (j < direita.length) {
-    lista[k++] = direita[j++];
-  }
 }
 
 double _mediana(List<double> valores) {

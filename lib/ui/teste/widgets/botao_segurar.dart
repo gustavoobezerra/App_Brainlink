@@ -6,7 +6,7 @@ import '../tema/icones.dart';
 import '../tema/svg_figura.dart';
 import '../tema/tema_teste.dart';
 
-/// Botão que só age depois de ser segurado por [duracao] (2 s no design).
+/// Botão que só age depois de ser segurado por 2 s.
 ///
 /// Soltar antes do fim desfaz o progresso. Usa eventos crus de ponteiro, então
 /// também funciona em cima de uma área de toque de tela inteira. Leitores de
@@ -16,7 +16,6 @@ class BotaoSegurar extends StatefulWidget {
     super.key,
     required this.aoConcluir,
     required this.construtor,
-    this.duracao = const Duration(seconds: 2),
     this.semantica = 'Encerrar o teste: segure por 2 segundos',
   });
 
@@ -24,7 +23,6 @@ class BotaoSegurar extends StatefulWidget {
 
   /// Desenha o botão a partir do progresso (0 a 1).
   final Widget Function(BuildContext context, double progresso) construtor;
-  final Duration duracao;
   final String semantica;
 
   /// Pílula "Segure para encerrar" (Calibração, Repouso, Repouso final).
@@ -192,7 +190,7 @@ class _BotaoSegurarState extends State<BotaoSegurar>
     with SingleTickerProviderStateMixin {
   late final AnimationController _progresso = AnimationController(
     vsync: this,
-    duration: widget.duracao,
+    duration: const Duration(seconds: 2),
   )..addStatusListener(_aoMudarStatus);
 
   int? _ponteiro;
@@ -217,14 +215,6 @@ class _BotaoSegurarState extends State<BotaoSegurar>
     if (_progresso.isAnimating) {
       _progresso.stop();
       _progresso.value = 0;
-    }
-  }
-
-  @override
-  void didUpdateWidget(BotaoSegurar oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.duracao != widget.duracao) {
-      _progresso.duration = widget.duracao;
     }
   }
 

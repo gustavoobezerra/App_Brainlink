@@ -10,7 +10,8 @@ abstract final class FontesTeste {
 /// Atalhos de estilo de texto com os valores do design.
 ///
 /// Os tamanhos são os pixels do protótipo de 390 × 844, que correspondem aos
-/// pixels lógicos do Flutter. O peso padrão é `w400`.
+/// pixels lógicos do Flutter. O peso padrão é `w400`. A sobra da entrelinha
+/// é dividida igualmente acima e abaixo do texto, como no CSS.
 abstract final class TipografiaTeste {
   static TextStyle next(
     double tamanho, {
@@ -29,6 +30,7 @@ abstract final class TipografiaTeste {
         letterSpacing: espacamento,
         decoration: decoracao,
         decorationColor: cor,
+        leadingDistribution: TextLeadingDistribution.even,
       );
 
   /// Texto monoespaçado; [espacamentoEm] segue o `letter-spacing` em `em`.
@@ -46,6 +48,7 @@ abstract final class TipografiaTeste {
         color: cor,
         height: altura,
         letterSpacing: espacamentoEm * tamanho,
+        leadingDistribution: TextLeadingDistribution.even,
       );
 }
 
@@ -382,14 +385,10 @@ class TemaTeste extends StatelessWidget {
     super.key,
     required this.child,
     this.sempreEscuro = false,
-    this.brilhoForcado,
   });
 
   final Widget child;
   final bool sempreEscuro;
-
-  /// Substitui o brilho do sistema; usado em testes e capturas.
-  final Brightness? brilhoForcado;
 
   /// `line-height: normal` desta fonte no navegador (o design usa esse
   /// valor sempre que não define outro).
@@ -436,8 +435,7 @@ class TemaTeste extends StatelessWidget {
   Widget build(BuildContext context) {
     final brilho = sempreEscuro
         ? Brightness.dark
-        : brilhoForcado ??
-            context.dependOnInheritedWidgetOfExactType<BrilhoTeste>()?.brilho ??
+        : context.dependOnInheritedWidgetOfExactType<BrilhoTeste>()?.brilho ??
             MediaQuery.platformBrightnessOf(context);
     final cores = brilho == Brightness.dark
         ? CoresTeste.escuroPadrao

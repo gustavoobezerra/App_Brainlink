@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../data/models/sessao_teste.dart';
-import '../tema/icones.dart';
-import '../tema/svg_figura.dart';
 import '../tema/tema_teste.dart';
 import '../widgets/botao_teste.dart';
 import '../widgets/cartao_contato.dart';
@@ -50,7 +48,7 @@ class TelaContatoPerdido extends StatelessWidget {
           return PaginaTeste(
             espaco: 22,
             children: [
-              _TestePausado(cores: cores),
+              const LinhaTestePausado(),
               Expanded(
                 child: ColunaTeste(
                   espaco: 22,
@@ -133,25 +131,4 @@ class TelaContatoPerdido extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Linha "Teste pausado" com o ícone de pausa (15 px, texto suave).
-class _TestePausado extends StatelessWidget {
-  const _TestePausado({required this.cores});
-
-  final CoresTeste cores;
-
-  @override
-  Widget build(BuildContext context) => LinhaTeste(
-        espaco: 10,
-        children: [
-          IconeSvg(IconesTeste.pausa, tamanho: 18, cor: cores.textoSuave),
-          Flexible(
-            child: Text(
-              'Teste pausado',
-              style: TipografiaTeste.next(15, cor: cores.textoSuave),
-            ),
-          ),
-        ],
-      );
 }

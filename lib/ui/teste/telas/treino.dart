@@ -1,5 +1,3 @@
-import 'dart:ui' show PathMetric;
-
 import 'package:flutter/material.dart';
 
 import '../../../data/models/sessao_teste.dart';
@@ -52,26 +50,22 @@ class TelaTreino extends StatelessWidget {
         child: Builder(
           builder: (context) {
             final cores = TemaTeste.of(context);
-            return _alturaNormal(
-              context,
-              PaginaTeste(
-                espaco: 20,
-                children: [
-                  CabecalhoEtapa(
-                    etapa: 4,
-                    rotulo: 'Treino',
-                    rotuloDireita: concluido
-                        ? '$total de $total'
-                        : '${_auditiva ? 'Som' : 'Figura'} $indice de $total',
-                  ),
-                  if (concluido) ...[
-                    Expanded(child: _fim(cores)),
-                    BotaoTeste(
-                        texto: 'Começar o teste', aoTocar: aoComecarTeste),
-                  ] else
-                    Expanded(child: _area(cores)),
-                ],
-              ),
+            return PaginaTeste(
+              espaco: 20,
+              children: [
+                CabecalhoEtapa(
+                  etapa: 4,
+                  rotulo: 'Treino',
+                  rotuloDireita: concluido
+                      ? '$total de $total'
+                      : '${_auditiva ? 'Som' : 'Figura'} $indice de $total',
+                ),
+                if (concluido) ...[
+                  Expanded(child: _fim(cores)),
+                  BotaoTeste(texto: 'Começar o teste', aoTocar: aoComecarTeste),
+                ] else
+                  Expanded(child: _area(cores)),
+              ],
             );
           },
         ),
@@ -139,7 +133,7 @@ class TelaTreino extends StatelessWidget {
       // Uma cópia invisível da dica em cima mantém a figura no centro exato.
       filhos = [
         ExcludeSemantics(child: Opacity(opacity: 0, child: dica)),
-        _estimulo(),
+        FiguraEstimulo(estimuloVisual, caixa: 120),
         dica,
       ];
     } else {
@@ -160,28 +154,6 @@ class TelaTreino extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  /// Figura ou cruz de fixação, numa caixa fixa de 120 para não deslocar.
-  Widget _estimulo() {
-    final FiguraSvg? figura = switch (estimuloVisual) {
-      EstimuloVisual.nenhum => null,
-      EstimuloVisual.fixacao => IconesTeste.cruzFixacao,
-      EstimuloVisual.comum => IconesTeste.barcoComum,
-      EstimuloVisual.raro => IconesTeste.barcoPirata,
-    };
-    return SizedBox(
-      width: 120,
-      height: 120,
-      child: Center(
-        child: figura == null
-            ? null
-            : IconeSvg(
-                figura,
-                tamanho: estimuloVisual == EstimuloVisual.fixacao ? 20 : 120,
-              ),
       ),
     );
   }
@@ -280,44 +252,12 @@ class _BordaTracejada extends CustomPainter {
       ..color = cor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
-    final caminho = Path()..addRRect(retangulo);
-    for (final PathMetric metrica in caminho.computeMetrics()) {
-      var distancia = 0.0;
-      while (distancia < metrica.length) {
-        canvas.drawPath(
-          metrica.extractPath(distancia, distancia + _traco),
-          pincel,
-        );
-        distancia += _traco + _vao;
-      }
-    }
+    canvas.drawPath(
+      tracejar(Path()..addRRect(retangulo), const [_traco, _vao]),
+      pincel,
+    );
   }
 
   @override
   bool shouldRepaint(_BordaTracejada oldDelegate) => oldDelegate.cor != cor;
-}
-
-/// O `line-height: normal` do navegador vale 1,3 nesta fonte; o tema do
-/// Material herda 1,43 do `bodyMedium`, então a tela fixa 1,3 como padrão,
-/// com a sobra da entrelinha dividida igualmente (como no CSS).
-Widget _alturaNormal(BuildContext context, Widget filho) {
-  final tema = Theme.of(context);
-  final corpo = tema.textTheme.bodyMedium ?? const TextStyle();
-  return Theme(
-    data: tema.copyWith(
-      textTheme: tema.textTheme.copyWith(
-        bodyMedium: corpo.copyWith(
-          height: 1.3,
-          leadingDistribution: TextLeadingDistribution.even,
-        ),
-      ),
-    ),
-    child: DefaultTextStyle.merge(
-      style: const TextStyle(
-        height: 1.3,
-        leadingDistribution: TextLeadingDistribution.even,
-      ),
-      child: filho,
-    ),
-  );
 }

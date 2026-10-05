@@ -87,6 +87,8 @@ class ControladorTeste extends ChangeNotifier {
   static const int _nanosPorMs = 1000000;
   static const int _nanosPorSegundo = 1000000000;
 
+  static int _ns(Duration duracao) => duracao.inMicroseconds * 1000;
+
   // ---------------------------------------------------------------------------
   // Estado público.
 
@@ -187,10 +189,9 @@ class ControladorTeste extends ChangeNotifier {
   MotivoPausa? _pausa;
   MotivoPausa? get pausa => _pausa;
 
+  /// Fase interrompida pela pausa. A pausa não muda [etapa]: "Retomar"
+  /// volta para a etapa atual.
   FaseTeste? _fasePausada;
-  FaseTeste? get fasePausada => _fasePausada;
-
-  EtapaTeste? _etapaRetorno;
 
   Duration _momentoPausa = Duration.zero;
 
@@ -210,7 +211,8 @@ class ControladorTeste extends ChangeNotifier {
   bool _saidaAberta = false;
   bool get saidaAberta => _saidaAberta;
 
-  /// Etapa 1 a 7 da barra de progresso (o brief agrupa as telas em 7 etapas).
+  /// Nome da fase interrompida ("pausado em Tarefa"); fora de uma fase, a
+  /// última com dados gravados (ou a calibração, se nada foi gravado).
   String get rotuloFasePausada =>
       (_fasePausada ?? _ultimaFaseGravada)?.rotulo ??
       FaseTeste.calibracao.rotulo;
@@ -268,6 +270,10 @@ class ControladorTeste extends ChangeNotifier {
   bool _descartado = false;
   final List<StreamSubscription<Object?>> _assinaturas = [];
   Timer? _pulso;
+
+  /// O que o pulso mostrou por último: segundo restante, segundos sem dados
+  /// e qualidade.
+  (int, int, QualidadeSinal)? _exibidoNoPulso;
   Timer? _timerVolume;
   Timer? _timerReconexao;
   Timer? _timerTreino;
@@ -437,14 +443,20 @@ class ControladorTeste extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Fonte do headset para buscar ou conectar: a atual, se já for do
+  /// headset; senão descarta a simulada e cria uma nova.
+  Future<FonteSinal> _garantirFonteHeadset() async {
+    final atual = _fonte;
+    if (atual != null && !atual.simulada) return atual;
+    await atual?.dispose();
+    final fonte = _criarFonteHeadset();
+    _usarFonte(fonte, _duracoesHeadset);
+    return fonte;
+  }
+
   Future<void> procurarDispositivos() async {
     if (_buscando) return;
-    var fonte = _fonte;
-    if (fonte == null || fonte.simulada) {
-      await fonte?.dispose();
-      fonte = _criarFonteHeadset();
-      _usarFonte(fonte, _duracoesHeadset);
-    }
+    final fonte = await _garantirFonteHeadset();
     _buscando = true;
     _erroConexao = null;
     notifyListeners();
@@ -464,12 +476,7 @@ class ControladorTeste extends ChangeNotifier {
   }
 
   Future<void> escolherDispositivo(DispositivoSinal dispositivo) async {
-    var fonte = _fonte;
-    if (fonte == null || fonte.simulada) {
-      await fonte?.dispose();
-      fonte = _criarFonteHeadset();
-      _usarFonte(fonte, _duracoesHeadset);
-    }
+    final fonte = await _garantirFonteHeadset();
     _conectandoId = dispositivo.id;
     _erroConexao = null;
     notifyListeners();
@@ -552,7 +559,6 @@ class ControladorTeste extends ChangeNotifier {
         duracaoMs: _duracoes.calibracao.inMilliseconds,
         eventos: eventos,
         aoTerminar: _terminarCalibracao,
-        monitorarContato: true,
       ),
     );
   }
@@ -647,7 +653,6 @@ class ControladorTeste extends ChangeNotifier {
           _controle?.definirEstado(EstadoSimulado.olhosAbertos);
           _irPara(final_ ? EtapaTeste.repousoFinalFim : EtapaTeste.repousoFim);
         },
-        monitorarContato: true,
       ),
     );
   }
@@ -832,7 +837,7 @@ class ControladorTeste extends ChangeNotifier {
         fase: fase,
         duracaoMs: deslocamento,
         eventos: eventos,
-        ensaios: ensaios,
+        comEstimulos: true,
         aoTerminar: () {
           _timerFigura?.cancel();
           _estimuloVisual = EstimuloVisual.nenhum;
@@ -840,7 +845,6 @@ class ControladorTeste extends ChangeNotifier {
           _controle?.definirEstado(EstadoSimulado.olhosAbertos);
           aoTerminar();
         },
-        monitorarContato: true,
       ),
     );
   }
@@ -988,7 +992,6 @@ class ControladorTeste extends ChangeNotifier {
   void _pausar(MotivoPausa motivo) {
     final execucao = _execucao;
     if (_pausa == null) {
-      _etapaRetorno = _etapa;
       _fasePausada = execucao?.fase;
       if (execucao != null) {
         _momentoPausa = restanteFase;
@@ -1013,49 +1016,52 @@ class ControladorTeste extends ChangeNotifier {
   void retomar() {
     if (_pausa != MotivoPausa.contato || !_contatoRecuperado) return;
     final execucao = _execucao;
-    final retorno = _etapaRetorno;
     _limparPausa();
     if (execucao != null && execucao.congelada) {
-      if (execucao.fase == FaseTeste.calibracao) {
-        _descartarExecucao();
-        _iniciarCalibracao();
-        return;
-      }
-      _etapa = retorno ?? _etapa;
-      if (execucao.fase.olhosFechados(_versao)) {
-        _sinalComeco();
-        if (execucao.fase == FaseTeste.repouso ||
-            execucao.fase == FaseTeste.repousoFinal) {
-          _controle?.definirEstado(EstadoSimulado.olhosFechados);
-        }
-      }
-      _retomarExecucao(execucao, preparacaoMs: _preparacaoRetomadaMs(execucao));
-      notifyListeners();
+      _retomarCongelada(execucao, sinalizarComeco: true);
       return;
     }
-    if (retorno == EtapaTeste.treino) {
-      _etapa = retorno!;
+    if (_etapa == EtapaTeste.treino) {
       _descongelarTreino();
       notifyListeners();
       return;
     }
-    if (retorno != null) _irPara(retorno);
+    _irPara(_etapa);
+  }
+
+  /// Continua uma fase congelada por pausa ou pela confirmação de saída; a
+  /// calibração recomeça do zero. Com [sinalizarComeco] (volta de uma pausa),
+  /// as fases de olhos fechados repetem o sino de começo.
+  void _retomarCongelada(_Execucao execucao, {required bool sinalizarComeco}) {
+    if (execucao.fase == FaseTeste.calibracao) {
+      _descartarExecucao();
+      _iniciarCalibracao();
+      return;
+    }
+    if (sinalizarComeco && execucao.fase.olhosFechados(_versao)) {
+      _sinalComeco();
+      if (execucao.fase == FaseTeste.repouso ||
+          execucao.fase == FaseTeste.repousoFinal) {
+        _controle?.definirEstado(EstadoSimulado.olhosFechados);
+      }
+    }
+    _retomarExecucao(execucao, preparacaoMs: _preparacaoRetomadaMs(execucao));
+    notifyListeners();
   }
 
   /// "Recomeçar esta fase" (E1): descarta a fase e volta à sua tela inicial.
   void recomecarFase() {
     if (_pausa == null) return;
     final execucao = _execucao;
-    final retorno = _etapaRetorno;
     _limparPausa();
     if (execucao == null) {
-      if (retorno == EtapaTeste.treino) {
+      if (_etapa == EtapaTeste.treino) {
         _etapa = EtapaTeste.instrucoesTarefa;
         _treinoCongelado = false;
         iniciarTreino();
         return;
       }
-      if (retorno != null) _irPara(retorno);
+      _irPara(_etapa);
       return;
     }
     final fase = execucao.fase;
@@ -1115,7 +1121,6 @@ class ControladorTeste extends ChangeNotifier {
 
   void _limparPausa() {
     _pausa = null;
-    _etapaRetorno = null;
     _fasePausada = null;
     _contatoRecuperado = false;
     _inicioBomNaPausaNanos = null;
@@ -1145,16 +1150,10 @@ class ControladorTeste extends ChangeNotifier {
     if (_pausa == null) {
       final execucao = _execucao;
       if (execucao != null && execucao.congelada) {
-        if (execucao.fase == FaseTeste.calibracao) {
-          _descartarExecucao();
-          _iniciarCalibracao();
-          return;
-        }
-        _retomarExecucao(execucao,
-            preparacaoMs: _preparacaoRetomadaMs(execucao));
-      } else if (_etapa == EtapaTeste.treino) {
-        _descongelarTreino();
+        _retomarCongelada(execucao, sinalizarComeco: false);
+        return;
       }
+      if (_etapa == EtapaTeste.treino) _descongelarTreino();
     }
     notifyListeners();
   }
@@ -1277,7 +1276,7 @@ class ControladorTeste extends ChangeNotifier {
     _fecharTrecho(execucao);
     execucao.congelada = true;
     final aberto = execucao.ensaioAberto;
-    if (aberto != null && execucao.ensaios != null) {
+    if (aberto != null && execucao.comEstimulos) {
       // O estímulo em curso perde a janela de resposta: sai da conta.
       aberto.interrompido = true;
       execucao.ensaioAberto = null;
@@ -1301,7 +1300,7 @@ class ControladorTeste extends ChangeNotifier {
   }
 
   int _preparacaoRetomadaMs(_Execucao execucao) =>
-      execucao.ensaios == null ? 0 : _duracoes.preparacaoTarefa.inMilliseconds;
+      execucao.comEstimulos ? _duracoes.preparacaoTarefa.inMilliseconds : 0;
 
   void _descartarExecucao() {
     final execucao = _execucao;
@@ -1351,11 +1350,12 @@ class ControladorTeste extends ChangeNotifier {
     final agora = _relogio.agoraNanos();
     _ultimoLoteNanos = agora;
     _sessao?.lotes.add(lote);
-    final microvolts = lote.toMicrovolts();
-    final anterior = _tracado ?? const <double>[];
-    final juntos = [...anterior, ...microvolts];
-    _tracado =
-        juntos.length > 1024 ? juntos.sublist(juntos.length - 1024) : juntos;
+    if (_etapa == EtapaTeste.sensor) {
+      // O traçado só aparece na tela do sensor.
+      final juntos = [...?_tracado, ...lote.toMicrovolts()];
+      _tracado =
+          juntos.length > 1024 ? juntos.sublist(juntos.length - 1024) : juntos;
+    }
     final tentativa = _tentativa;
     if (_etapa == EtapaTeste.calibracao && tentativa != null) {
       try {
@@ -1433,8 +1433,7 @@ class ControladorTeste extends ChangeNotifier {
         !_saidaAberta &&
         (_fonte?.estadoConexao != EstadoConexao.conectado ||
             (ultimoLote != null &&
-                agora - ultimoLote >
-                    _duracoes.semDadosParaBluetooth.inMicroseconds * 1000))) {
+                agora - ultimoLote > _ns(_duracoes.semDadosParaBluetooth)))) {
       _pausar(MotivoPausa.bluetooth);
       return;
     }
@@ -1444,13 +1443,11 @@ class ControladorTeste extends ChangeNotifier {
     if (_pausa == null &&
         !_saidaAberta &&
         execucao != null &&
-        !execucao.congelada &&
-        execucao.monitorarContato) {
+        !execucao.congelada) {
       final ruim = q == QualidadeSinal.ajuste || q == QualidadeSinal.ruim;
       if (ruim) {
         _inicioRuimNanos ??= agora;
-        if (agora - _inicioRuimNanos! >=
-            _duracoes.contatoParaPausar.inMicroseconds * 1000) {
+        if (agora - _inicioRuimNanos! >= _ns(_duracoes.contatoParaPausar)) {
           _pausar(MotivoPausa.contato);
           return;
         }
@@ -1464,7 +1461,7 @@ class ControladorTeste extends ChangeNotifier {
       if (boa) {
         _inicioBomNaPausaNanos ??= agora;
         final recuperado = agora - _inicioBomNaPausaNanos! >=
-            _duracoes.contatoParaRetomar.inMicroseconds * 1000;
+            _ns(_duracoes.contatoParaRetomar);
         if (recuperado != _contatoRecuperado) {
           _contatoRecuperado = recuperado;
           notifyListeners();
@@ -1480,32 +1477,32 @@ class ControladorTeste extends ChangeNotifier {
 
     final animado = (execucao != null && !execucao.congelada) ||
         _pausa == MotivoPausa.bluetooth;
-    if (notificar && animado) notifyListeners();
+    if (notificar && animado) {
+      // O pulso só redesenha quando muda algo na tela: o segundo do relógio
+      // da fase, a espera pelos dados ou o pontinho de qualidade.
+      final restanteMs = restanteFase.inMilliseconds;
+      final exibido = ((restanteMs + 999) ~/ 1000, segundosSemDados, q);
+      if (exibido != _exibidoNoPulso) {
+        _exibidoNoPulso = exibido;
+        notifyListeners();
+      }
+    }
   }
 
   void _atualizarContato() {
     final agora = _relogio.agoraNanos();
-    final conectado = _fonte?.estadoConexao == EstadoConexao.conectado;
-    final q = _qualidadeAtual;
-    final instante = _qualidadeNanos;
-    final semLeitura = q == null ||
-        instante == null ||
-        agora - instante > 3 * _nanosPorSegundo;
-    final EstadoContato novo;
-    if (!conectado || semLeitura) {
-      novo = EstadoContato.procurando;
-    } else if (q <= 50) {
-      novo = EstadoContato.bom;
-    } else {
-      novo = EstadoContato.ajuste;
-    }
+    final novo = switch (qualidade) {
+      QualidadeSinal.semDados => EstadoContato.procurando,
+      QualidadeSinal.boa => EstadoContato.bom,
+      QualidadeSinal.ajuste || QualidadeSinal.ruim => EstadoContato.ajuste,
+    };
     if (novo == EstadoContato.bom) {
       _inicioEstavelNanos ??= agora;
     } else {
       _inicioEstavelNanos = null;
     }
     final inicioEstavel = _inicioEstavelNanos;
-    final necessarioNanos = _duracoes.contatoEstavel.inMicroseconds * 1000;
+    final necessarioNanos = _ns(_duracoes.contatoEstavel);
     final segmentos = inicioEstavel == null
         ? 0
         : (((agora - inicioEstavel) / necessarioNanos) * 10)
@@ -1556,9 +1553,6 @@ class ControladorTeste extends ChangeNotifier {
 
   void _irPara(EtapaTeste etapa) {
     _etapa = etapa;
-    // Uma transição durante a pausa (ex.: fim da espera pelos dados da
-    // calibração) também é para onde "Retomar" deve voltar.
-    if (_pausa != null) _etapaRetorno = etapa;
     if (etapa != EtapaTeste.volumeBaixo) _timerVolume?.cancel();
     notifyListeners();
   }
@@ -1597,6 +1591,7 @@ class ControladorTeste extends ChangeNotifier {
     _erroConexao = null;
     _inicioEstavelNanos = null;
     _segundosEstaveis = 0;
+    _tracado = null;
     _codigo = '';
     _irPara(EtapaTeste.inicio);
   }
@@ -1640,16 +1635,17 @@ class _Execucao {
     required this.duracaoMs,
     required this.eventos,
     required this.aoTerminar,
-    this.ensaios,
-    this.monitorarContato = false,
+    this.comEstimulos = false,
   });
 
   final FaseTeste fase;
   final int duracaoMs;
   final List<_Evento> eventos;
   final void Function() aoTerminar;
-  final List<Ensaio>? ensaios;
-  final bool monitorarContato;
+
+  /// Tarefa ou ritmo: estímulos com janela de resposta e preparação ao
+  /// retomar.
+  final bool comEstimulos;
 
   int decorridoMs = 0;
   int? inicioTrechoNanos;

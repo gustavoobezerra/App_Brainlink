@@ -9,6 +9,9 @@ import 'pontuacao_tarefa.dart';
 /// fechando os olhos ou se acomodando (Embasamento §6, item 6).
 const Duration descarteInicialFase = Duration(seconds: 2);
 
+/// Medida sem sinal (fase não gravada ou cálculo que falhou).
+const MedidaAlfa _semMedida = MedidaAlfa(potencia: null, segundosLimpos: 0);
+
 /// Monta os quatro cartões da tela de resultados da demonstração (10B).
 ///
 /// Cada medida segue a regra do ADR-004: sem sinal limpo suficiente, o cartão
@@ -21,7 +24,7 @@ ResumoDemonstracao montarResumoDemonstracao(
 
   // Cartão 1: olhos abertos (calibração, sem piscadas) × repouso fechado.
   final abertos = calibracao == null || calibracao.fimNanos == null
-      ? const MedidaAlfa(potencia: null, segundosLimpos: 0)
+      ? _semMedida
       : _medir(
           sessao,
           [(calibracao.inicioNanos, calibracao.fimNanos!)],
@@ -101,7 +104,7 @@ MedidaAlfa _medirFase(
     }
   }
   if (janelas.isEmpty) {
-    return const MedidaAlfa(potencia: null, segundosLimpos: 0);
+    return _semMedida;
   }
   return _medir(sessao, janelas, duracoes.minimoLimpoFaseSegundos);
 }
@@ -118,7 +121,7 @@ MedidaAlfa _medir(
         minimoSegundosLimpos: minimo,
       ),
     ) ??
-    const MedidaAlfa(potencia: null, segundosLimpos: 0);
+    _semMedida;
 
 /// Uma medida que falha vira "sem número" (com o motivo) em vez de impedir a
 /// tela de resultados de abrir.

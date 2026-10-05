@@ -8,6 +8,7 @@ import '../widgets/botao_teste.dart';
 import '../widgets/cabecalho_etapa.dart';
 import '../widgets/elementos_teste.dart';
 import '../widgets/pagina_teste.dart';
+import '../widgets/sublinhado.dart';
 
 /// Telas `Treino-auditivo` e `Treino-visual` do design: instruções da tarefa
 /// antes do treino (etapa 4).
@@ -43,147 +44,141 @@ class TelaInstrucoesTarefa extends StatelessWidget {
               altura: 1.45,
               cor: cores.textoSecundario,
             );
-            return _alturaNormal(
-              context,
-              PaginaTeste(
-                espaco: 20,
-                children: [
-                  const CabecalhoEtapa(
-                      etapa: 4, rotulo: 'Instruções da tarefa'),
-                  Semantics(
-                    header: true,
-                    child: auditiva
-                        ? Text.rich(
-                            TextSpan(
-                              style: titulo,
-                              children: const [
-                                TextSpan(text: 'Você vai ouvir dois sons: um '),
-                                TextSpan(text: 'grave', style: forte),
-                                TextSpan(text: ' e um '),
-                                TextSpan(text: 'agudo', style: forte),
-                                TextSpan(text: '.'),
-                              ],
-                            ),
-                          )
-                        : Text(
-                            'Vão aparecer figuras no centro da tela, uma de '
-                            'cada vez.',
+            return PaginaTeste(
+              espaco: 20,
+              children: [
+                const CabecalhoEtapa(etapa: 4, rotulo: 'Instruções da tarefa'),
+                Semantics(
+                  header: true,
+                  child: auditiva
+                      ? Text.rich(
+                          TextSpan(
                             style: titulo,
+                            children: const [
+                              TextSpan(text: 'Você vai ouvir dois sons: um '),
+                              TextSpan(text: 'grave', style: forte),
+                              TextSpan(text: ' e um '),
+                              TextSpan(text: 'agudo', style: forte),
+                              TextSpan(text: '.'),
+                            ],
                           ),
+                        )
+                      : Text(
+                          'Vão aparecer figuras no centro da tela, uma de '
+                          'cada vez.',
+                          style: titulo,
+                        ),
+                ),
+                if (auditiva) ...[
+                  LinhaTeste(
+                    espaco: 12,
+                    children: [
+                      Expanded(
+                        child: _BotaoExemplo(
+                          texto: 'Som grave',
+                          aoTocar: () => aoOuvirExemplo(TipoEstimulo.comum),
+                        ),
+                      ),
+                      Expanded(
+                        child: _BotaoExemplo(
+                          texto: 'Som agudo',
+                          aoTocar: () => aoOuvirExemplo(TipoEstimulo.raro),
+                        ),
+                      ),
+                    ],
                   ),
-                  if (auditiva) ...[
-                    LinhaTeste(
+                  const _CartaoRegra(),
+                  Text.rich(
+                    TextSpan(
+                      style: paragrafo,
+                      children: [
+                        const TextSpan(
+                          text: 'Responda o mais rápido que puder, sem errar. '
+                              'Você vai fazer de ',
+                        ),
+                        TextSpan(
+                          text: 'olhos fechados',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: cores.texto,
+                          ),
+                        ),
+                        const TextSpan(text: ', segurando o celular.'),
+                      ],
+                    ),
+                  ),
+                ] else ...[
+                  const IntrinsicHeight(
+                    child: LinhaTeste(
                       espaco: 12,
+                      alinhamento: CrossAxisAlignment.stretch,
                       children: [
                         Expanded(
-                          child: _BotaoExemplo(
-                            texto: 'Som grave',
-                            aoTocar: () => aoOuvirExemplo(TipoEstimulo.comum),
+                          child: _CartaoFigura(
+                            figura: IconesTeste.barcoComum,
+                            rotulo: 'Figura comum',
+                            tocar: true,
                           ),
                         ),
                         Expanded(
-                          child: _BotaoExemplo(
-                            texto: 'Som agudo',
-                            aoTocar: () => aoOuvirExemplo(TipoEstimulo.raro),
+                          child: _CartaoFigura(
+                            figura: IconesTeste.barcoPirata,
+                            rotulo: 'Figura rara',
+                            tocar: false,
                           ),
                         ),
                       ],
                     ),
-                    const _CartaoRegra(),
-                    Text.rich(
-                      TextSpan(
-                        style: paragrafo,
-                        children: [
-                          const TextSpan(
-                            text:
-                                'Responda o mais rápido que puder, sem errar. '
-                                'Você vai fazer de ',
-                          ),
-                          TextSpan(
-                            text: 'olhos fechados',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: cores.texto,
-                            ),
-                          ),
-                          const TextSpan(text: ', segurando o celular.'),
-                        ],
-                      ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 16,
                     ),
-                  ] else ...[
-                    const IntrinsicHeight(
-                      child: LinhaTeste(
-                        espaco: 12,
-                        alinhamento: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(
-                            child: _CartaoFigura(
-                              figura: IconesTeste.barcoComum,
-                              rotulo: 'Figura comum',
-                              tocar: true,
-                            ),
-                          ),
-                          Expanded(
-                            child: _CartaoFigura(
-                              figura: IconesTeste.barcoPirata,
-                              rotulo: 'Figura rara',
-                              tocar: false,
-                            ),
-                          ),
-                        ],
-                      ),
+                    decoration: BoxDecoration(
+                      color: cores.fundoPesquisador,
+                      borderRadius: BorderRadius.circular(14),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 16,
-                      ),
-                      decoration: BoxDecoration(
-                        color: cores.fundoPesquisador,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: LinhaTeste(
-                        espaco: 14,
-                        children: [
-                          IconeSvg(
-                            IconesTeste.mais,
-                            tamanho: 26,
-                            cor: cores.acentoIcone,
-                          ),
-                          Expanded(
-                            child: Text.rich(
-                              TextSpan(
-                                style: TipografiaTeste.next(
-                                  19,
-                                  altura: 1.35,
-                                  cor: cores.texto,
-                                ),
-                                children: const [
-                                  TextSpan(text: 'Olhe sempre para o '),
-                                  TextSpan(
-                                      text: 'centro da tela', style: forte),
-                                  TextSpan(text: '.'),
-                                ],
+                    child: LinhaTeste(
+                      espaco: 14,
+                      children: [
+                        IconeSvg(
+                          IconesTeste.mais,
+                          tamanho: 26,
+                          cor: cores.acentoIcone,
+                        ),
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(
+                              style: TipografiaTeste.next(
+                                19,
+                                altura: 1.35,
+                                cor: cores.texto,
                               ),
+                              children: const [
+                                TextSpan(text: 'Olhe sempre para o '),
+                                TextSpan(text: 'centro da tela', style: forte),
+                                TextSpan(text: '.'),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                    Text(
-                      'Responda o mais rápido que puder, sem errar.',
-                      style: paragrafo,
-                    ),
-                  ],
-                  const Spacer(),
-                  BotaoTeste(
-                    texto: auditiva
-                        ? 'Fazer o treino (10 sons)'
-                        : 'Fazer o treino (10 figuras)',
-                    aoTocar: aoFazerTreino,
+                  ),
+                  Text(
+                    'Responda o mais rápido que puder, sem errar.',
+                    style: paragrafo,
                   ),
                 ],
-              ),
+                const Spacer(),
+                BotaoTeste(
+                  texto: auditiva
+                      ? 'Fazer o treino (10 sons)'
+                      : 'Fazer o treino (10 figuras)',
+                  aoTocar: aoFazerTreino,
+                ),
+              ],
             );
           },
         ),
@@ -396,108 +391,10 @@ Widget _textoNaoToque(
           WidgetSpan(
             alignment: PlaceholderAlignment.baseline,
             baseline: TextBaseline.alphabetic,
-            child: _Sublinhado('NÃO', estilo: estilo, deslocamento: 4),
+            child: TextoSublinhado('NÃO', estilo: estilo, deslocamento: 4),
           ),
           const TextSpan(text: ' toque'),
         ],
       ),
       textAlign: alinhamento,
     );
-
-/// Texto sublinhado com afastamento da linha de base, como o
-/// `text-underline-offset` do CSS (o Flutter não tem esse ajuste).
-class _Sublinhado extends StatelessWidget {
-  const _Sublinhado(
-    this.texto, {
-    required this.estilo,
-    required this.deslocamento,
-  });
-
-  final String texto;
-  final TextStyle estilo;
-  final double deslocamento;
-
-  @override
-  Widget build(BuildContext context) {
-    final escala = MediaQuery.textScalerOf(context);
-    return CustomPaint(
-      foregroundPainter: _PintorSublinhado(
-        texto: texto,
-        estilo: estilo,
-        deslocamento: deslocamento,
-        escala: escala,
-      ),
-      child: Text(texto, style: estilo),
-    );
-  }
-}
-
-class _PintorSublinhado extends CustomPainter {
-  _PintorSublinhado({
-    required this.texto,
-    required this.estilo,
-    required this.deslocamento,
-    required this.escala,
-  });
-
-  final String texto;
-  final TextStyle estilo;
-  final double deslocamento;
-  final TextScaler escala;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final pintor = TextPainter(
-      text: TextSpan(text: texto, style: estilo),
-      textDirection: TextDirection.ltr,
-      textScaler: escala,
-    )..layout();
-    final base = pintor.computeDistanceToActualBaseline(
-      TextBaseline.alphabetic,
-    );
-    pintor.dispose();
-    final tamanho = escala.scale(estilo.fontSize ?? 14);
-    final espessura = tamanho / 14;
-    canvas.drawRect(
-      Rect.fromLTWH(
-        0,
-        base + escala.scale(deslocamento),
-        size.width,
-        espessura,
-      ),
-      Paint()..color = estilo.color ?? const Color(0xFFFFFFFF),
-    );
-  }
-
-  @override
-  bool shouldRepaint(_PintorSublinhado oldDelegate) =>
-      oldDelegate.texto != texto ||
-      oldDelegate.estilo != estilo ||
-      oldDelegate.deslocamento != deslocamento ||
-      oldDelegate.escala != escala;
-}
-
-/// O `line-height: normal` do navegador vale 1,3 nesta fonte; o tema do
-/// Material herda 1,43 do `bodyMedium`, então a tela fixa 1,3 como padrão,
-/// com a sobra da entrelinha dividida igualmente (como no CSS).
-Widget _alturaNormal(BuildContext context, Widget filho) {
-  final tema = Theme.of(context);
-  final corpo = tema.textTheme.bodyMedium ?? const TextStyle();
-  return Theme(
-    data: tema.copyWith(
-      textTheme: tema.textTheme.copyWith(
-        bodyMedium: corpo.copyWith(
-          height: 1.3,
-          leadingDistribution: TextLeadingDistribution.even,
-        ),
-      ),
-    ),
-    child: DefaultTextStyle.merge(
-      style: const TextStyle(
-        height: 1.3,
-        leadingDistribution: TextLeadingDistribution.even,
-      ),
-      child: filho,
-    ),
-  );
-}

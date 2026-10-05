@@ -23,11 +23,14 @@ class TracadoSinal extends StatelessWidget {
       child: SizedBox(
         height: altura,
         width: double.infinity,
-        child: CustomPaint(
-          painter: _PintorTracado(
-            amostras: microvolts,
-            cor: cores.tracado,
-            corVazio: cores.tracadoVazio,
+        // Redesenha a cada lote: fica numa camada própria.
+        child: RepaintBoundary(
+          child: CustomPaint(
+            painter: _PintorTracado(
+              amostras: microvolts,
+              cor: cores.tracado,
+              corVazio: cores.tracadoVazio,
+            ),
           ),
         ),
       ),

@@ -1,14 +1,11 @@
 import 'dart:async';
 
+import '../../data/models/bluetooth_device_info.dart' show ehNomeBrainLink;
 import '../../data/models/raw_batch.dart';
 import '../../native/brainlink_bridge.dart';
 import '../../ui/screens/home_screen.dart'
     show ConnectableDevice, DeviceDiscoveryGateway, NativeBrainLinkGateway;
 import 'fonte_sinal.dart';
-
-/// Nomes anunciados pelo aparelho: `BrainLink_Lite` e `BrainLink_pro`.
-bool _ehBrainLink(String nome) =>
-    nome.toLowerCase().replaceAll(RegExp(r'[\s_-]'), '').contains('brainlink');
 
 /// EEG do BrainLink real, por Bluetooth Clássico.
 ///
@@ -103,7 +100,7 @@ class FonteHeadset implements FonteSinal {
       return const AutoConectado();
     }
     final pareados = await _pareados();
-    final brainLinks = pareados.where((d) => _ehBrainLink(d.nome)).toList();
+    final brainLinks = pareados.where((d) => ehNomeBrainLink(d.nome)).toList();
     if (brainLinks.length == 1) {
       try {
         await conectar(brainLinks.single);
@@ -114,7 +111,7 @@ class FonteHeadset implements FonteSinal {
     }
     return AutoEscolher([
       ...brainLinks,
-      ...pareados.where((d) => !_ehBrainLink(d.nome)),
+      ...pareados.where((d) => !ehNomeBrainLink(d.nome)),
     ]);
   }
 
@@ -130,7 +127,7 @@ class FonteHeadset implements FonteSinal {
 
   Future<DispositivoSinal?> _unicoBrainLinkPareado() async {
     final brainLinks =
-        (await _pareados()).where((d) => _ehBrainLink(d.nome)).toList();
+        (await _pareados()).where((d) => ehNomeBrainLink(d.nome)).toList();
     return brainLinks.length == 1 ? brainLinks.single : null;
   }
 

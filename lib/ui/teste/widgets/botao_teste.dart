@@ -34,12 +34,10 @@ class BotaoTeste extends StatelessWidget {
     this.icone,
     this.tamanhoIcone = 18,
     this.corIcone,
-    this.iconeDepois = false,
     this.bordaForte = false,
     this.espacoIcone = 10,
     this.alinhamento = MainAxisAlignment.center,
     this.preenchimentoHorizontal = 16,
-    this.semantica,
   });
 
   final String texto;
@@ -49,22 +47,18 @@ class BotaoTeste extends StatelessWidget {
   final FontWeight peso;
   final double altura;
 
-  /// Ícone opcional, antes do texto (ou depois, com [iconeDepois]).
+  /// Ícone opcional, antes do texto.
   final FiguraSvg? icone;
   final double tamanhoIcone;
 
   /// Cor do ícone; padrão: a cor do texto.
   final Color? corIcone;
-  final bool iconeDepois;
 
   /// Secundário com borda `#33445F` em vez de `#25334A`.
   final bool bordaForte;
   final double espacoIcone;
   final MainAxisAlignment alinhamento;
   final double preenchimentoHorizontal;
-
-  /// Rótulo de acessibilidade; padrão: [texto].
-  final String? semantica;
 
   @override
   Widget build(BuildContext context) {
@@ -103,15 +97,11 @@ class BotaoTeste extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: alinhamento,
       children: [
-        if (iconeWidget != null && !iconeDepois) ...[
+        if (iconeWidget != null) ...[
           iconeWidget,
           SizedBox(width: espacoIcone),
         ],
         Flexible(child: rotulo),
-        if (iconeWidget != null && iconeDepois) ...[
-          SizedBox(width: espacoIcone),
-          iconeWidget,
-        ],
       ],
     );
     final forma = RoundedRectangleBorder(
@@ -121,7 +111,7 @@ class BotaoTeste extends StatelessWidget {
     return Semantics(
       button: true,
       enabled: habilitado,
-      label: semantica ?? texto,
+      label: texto,
       excludeSemantics: true,
       child: Material(
         color: fundo,

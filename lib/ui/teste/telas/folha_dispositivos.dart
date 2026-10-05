@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../services/teste/fonte_sinal.dart';
 import '../tema/tema_teste.dart';
 import '../widgets/botao_teste.dart';
+import '../widgets/opcao_radio.dart';
 import '../widgets/pagina_teste.dart';
 
 /// Painel "Escolha o headset" sobre um véu escuro (tela nova, no estilo das
@@ -43,7 +44,7 @@ class _FolhaDispositivosState extends State<FolhaDispositivos> {
 
   @override
   Widget build(BuildContext context) => TemaTeste(
-        child: _TextoCss(child: Builder(builder: _construir)),
+        child: Builder(builder: _construir),
       );
 
   Widget _construir(BuildContext context) {
@@ -188,9 +189,9 @@ class _FolhaDispositivosState extends State<FolhaDispositivos> {
                           espaco: 10,
                           children: [
                             for (final cenario in CenarioSimulado.values)
-                              _OpcaoCenario(
-                                rotulo: cenario.rotulo,
-                                marcada: cenario == _cenario,
+                              OpcaoRadioTeste(
+                                texto: cenario.rotulo,
+                                selecionada: cenario == _cenario,
                                 aoTocar: () =>
                                     setState(() => _cenario = cenario),
                               ),
@@ -299,115 +300,6 @@ class _LinhaDispositivo extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// Opção de cenário no estilo das respostas do ASRS (radio de 24 px).
-class _OpcaoCenario extends StatelessWidget {
-  const _OpcaoCenario({
-    required this.rotulo,
-    required this.marcada,
-    required this.aoTocar,
-  });
-
-  final String rotulo;
-  final bool marcada;
-  final VoidCallback aoTocar;
-
-  @override
-  Widget build(BuildContext context) {
-    final cores = TemaTeste.of(context);
-    final forma = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(14),
-      side: BorderSide(
-        color: marcada ? cores.acento : cores.borda,
-        width: 2,
-      ),
-    );
-    return Semantics(
-      inMutuallyExclusiveGroup: true,
-      checked: marcada,
-      label: rotulo,
-      excludeSemantics: true,
-      child: Material(
-        color: marcada ? cores.selecionadoFundo : cores.cartao,
-        shape: forma,
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: aoTocar,
-          customBorder: forma,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 60),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: LinhaTeste(
-                espaco: 14,
-                children: [
-                  Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: marcada ? cores.acentoIcone : cores.radioAnel,
-                        width: 2,
-                      ),
-                    ),
-                    alignment: Alignment.center,
-                    child: marcada
-                        ? Container(
-                            width: 12,
-                            height: 12,
-                            decoration: BoxDecoration(
-                              color: cores.acentoIcone,
-                              shape: BoxShape.circle,
-                            ),
-                          )
-                        : null,
-                  ),
-                  Expanded(
-                    child: Text(
-                      rotulo,
-                      style: TipografiaTeste.next(
-                        19,
-                        peso: marcada ? FontWeight.w600 : FontWeight.w400,
-                        cor: cores.texto,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// O `line-height: normal` do navegador vale 1,3 nesta fonte, sem
-/// espaçamento extra; o tema do Material herdaria 1,43 e 0,25 do
-/// `bodyMedium`. Fixa os valores do CSS, com a entrelinha dividida igualmente.
-class _TextoCss extends StatelessWidget {
-  const _TextoCss({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final tema = Theme.of(context);
-    const css = TextStyle(
-      height: 1.3,
-      letterSpacing: 0,
-      leadingDistribution: TextLeadingDistribution.even,
-    );
-    final corpo = (tema.textTheme.bodyMedium ?? const TextStyle()).merge(css);
-    return Theme(
-      data: tema.copyWith(
-        textTheme: tema.textTheme.copyWith(bodyMedium: corpo),
-      ),
-      child: DefaultTextStyle.merge(style: css, child: child),
     );
   }
 }
