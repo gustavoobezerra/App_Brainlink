@@ -345,13 +345,14 @@ void main() {
       const chave = ValueKey('cal');
       await montarTela(tester, _calibracao(r), chave: chave);
       final circulo = find.byType(AnimatedContainer);
-      expect(tester.getSize(circulo).width, closeTo(128.8, 0.01));
+      // 3 de 5 = 148 px, como no design.
+      expect(tester.getSize(circulo).width, closeTo(148, 0.01));
       await montarTela(tester, _calibracao(r, bipes: 5), chave: chave);
       await tester.pump(const Duration(milliseconds: 300));
       final meio = tester.getSize(circulo).width;
-      expect(meio, inExclusiveRange(128.8, 148));
+      expect(meio, inExclusiveRange(148, 180));
       await tester.pump(const Duration(milliseconds: 400));
-      expect(tester.getSize(circulo).width, closeTo(148, 0.01));
+      expect(tester.getSize(circulo).width, closeTo(180, 0.01));
     });
 
     testWidgets('segurar encerra', (tester) async {

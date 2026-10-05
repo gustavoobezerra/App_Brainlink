@@ -156,7 +156,11 @@ class FonteSimulada implements FonteSinal, ControleSimulacao {
     }
     _timersCenario.clear();
     _encerrada = true;
-    await Future.wait([_lotes.close(), _qualidade.close(), _conexao.close()]);
+    // Sem aguardar a entrega do "fim" aos ouvintes: quem ainda ouve não
+    // pode segurar o encerramento.
+    unawaited(_lotes.close());
+    unawaited(_qualidade.close());
+    unawaited(_conexao.close());
   }
 
   @override

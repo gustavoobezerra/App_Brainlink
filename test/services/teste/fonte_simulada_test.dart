@@ -61,8 +61,10 @@ class _Cenario {
 
   Future<void> encerrar() async {
     await fonte.dispose();
+    // Sem `await`: o cancelamento de assinatura broadcast completa na zona
+    // raiz, que o tempo falso do testWidgets não processa.
     for (final a in _assinaturas) {
-      await a.cancel();
+      unawaited(a.cancel());
     }
   }
 }
@@ -113,10 +115,26 @@ List<int> _picos(List<RawBatch> lotes) {
   return picos;
 }
 
+/// Teste com a fonte sempre encerrada no fim, mesmo se algo falhar
+/// (timer periódico pendente travaria o tempo falso).
+void _testar(
+  String nome,
+  CenarioSimulado cenario,
+  Future<void> Function(WidgetTester tester, _Cenario c) corpo,
+) {
+  testWidgets(nome, (tester) async {
+    final c = _Cenario(cenario);
+    try {
+      await corpo(tester, c);
+    } finally {
+      await c.encerrar();
+    }
+  });
+}
+
 void main() {
-  testWidgets('conecta, 1 lote/s com t0MonoNanos e qualidade 120→0',
-      (tester) async {
-    final c = _Cenario(CenarioSimulado.tudoCerto);
+  _testar('conecta, 1 lote/s com t0MonoNanos e qualidade 120→0',
+      CenarioSimulado.tudoCerto, (tester, c) async {
     expect(c.fonte.simulada, isTrue);
     expect(c.fonte.estadoConexao, EstadoConexao.desconectado);
     expect(await c.fonte.buscar(), isEmpty);
@@ -143,11 +161,10 @@ void main() {
     for (final (_, uv) in _amostras(c.lotes)) {
       expect(uv.abs(), lessThan(100));
     }
-    await c.encerrar();
   });
 
-  testWidgets('alfa maior de olhos fechados', (tester) async {
-    final c = _Cenario(CenarioSimulado.tudoCerto);
+  _testar('alfa maior de olhos fechados', CenarioSimulado.tudoCerto,
+      (tester, c) async {
     await c.conectar(tester);
     c.fonte.definirEstado(EstadoSimulado.olhosAbertos);
     await c.avancar(tester, const Duration(seconds: 8));
@@ -170,11 +187,10 @@ void main() {
     for (final (_, uv) in _amostras([...abertos, ...fechados, ...tarefa])) {
       expect(uv.abs(), lessThan(100));
     }
-    await c.encerrar();
   });
 
-  testWidgets('piscada ~350 ms após o bipe, com rebote', (tester) async {
-    final c = _Cenario(CenarioSimulado.tudoCerto);
+  _testar('piscada ~350 ms após o bipe, com rebote', CenarioSimulado.tudoCerto,
+      (tester, c) async {
     await c.conectar(tester);
     // Pico perto da virada de lote: parte cai no lote seguinte.
     await c.avancar(tester, const Duration(milliseconds: 1650));
@@ -197,49 +213,43 @@ void main() {
         .map((a) => a.$2)
         .reduce(math.min);
     expect(rebote, lessThan(-15));
-    await c.encerrar();
   });
 
-  Future<int> piscadasNaCalibracao(
-    WidgetTester tester,
-    CenarioSimulado cenario,
-  ) async {
-    final c = _Cenario(cenario);
+  /// Duas séries de 5 bipes; devolve as piscadas da primeira.
+  Future<int> piscadasNaCalibracao(WidgetTester tester, _Cenario c) async {
     await c.conectar(tester);
     await c.avancar(tester, const Duration(seconds: 1));
-    for (var i = 0; i < 5; i++) {
-      c.fonte.aoBipeCalibracao(c.relogio.nanos);
-      await c.avancar(tester, const Duration(milliseconds: 1500));
+    Future<int> serie() async {
+      c.lotes.clear();
+      for (var i = 0; i < 5; i++) {
+        c.fonte.aoBipeCalibracao(c.relogio.nanos);
+        await c.avancar(tester, const Duration(milliseconds: 1500));
+      }
+      await c.avancar(tester, const Duration(seconds: 2));
+      return _picos(c.lotes).length;
     }
-    await c.avancar(tester, const Duration(seconds: 2));
-    final quantidade = _picos(c.lotes).length;
+
+    final primeira = await serie();
     // Segunda série: todas as piscadas aparecem.
-    c.lotes.clear();
-    for (var i = 0; i < 5; i++) {
-      c.fonte.aoBipeCalibracao(c.relogio.nanos);
-      await c.avancar(tester, const Duration(milliseconds: 1500));
-    }
-    await c.avancar(tester, const Duration(seconds: 2));
-    expect(_picos(c.lotes), hasLength(5));
-    await c.encerrar();
-    return quantidade;
+    expect(await serie(), 5);
+    return primeira;
   }
 
-  testWidgets('tudo certo: 5 piscadas em 5 bipes', (tester) async {
-    expect(await piscadasNaCalibracao(tester, CenarioSimulado.tudoCerto), 5);
+  _testar('tudo certo: 5 piscadas em 5 bipes', CenarioSimulado.tudoCerto,
+      (tester, c) async {
+    expect(await piscadasNaCalibracao(tester, c), 5);
   });
 
-  testWidgets('poucas piscadas: o 3º bipe da 1ª série fica sem piscada',
-      (tester) async {
-    expect(
-      await piscadasNaCalibracao(tester, CenarioSimulado.poucasPiscadas),
-      4,
-    );
-  });
+  _testar(
+    'poucas piscadas: o 3º bipe da 1ª série fica sem piscada',
+    CenarioSimulado.poucasPiscadas,
+    (tester, c) async {
+      expect(await piscadasNaCalibracao(tester, c), 4);
+    },
+  );
 
-  testWidgets('perda de contato: 200 por 5 s, 6 s após entrar na tarefa',
-      (tester) async {
-    final c = _Cenario(CenarioSimulado.perdaContato);
+  _testar('perda de contato: 200 por 5 s, 6 s após entrar na tarefa',
+      CenarioSimulado.perdaContato, (tester, c) async {
     await c.conectar(tester);
     await c.avancar(tester, const Duration(seconds: 3));
     // Repouso não dispara a perda.
@@ -247,6 +257,8 @@ void main() {
     await c.avancar(tester, const Duration(seconds: 8));
     expect(c.lotes.map((l) => l.poorSignal).skip(2), everyElement(0));
 
+    // Meio segundo fora de fase com os lotes, para não cair na borda.
+    await c.avancar(tester, const Duration(milliseconds: 500));
     c.lotes.clear();
     c.qualidades.clear();
     final entrada = c.relogio.nanos;
@@ -266,12 +278,10 @@ void main() {
     c.fonte.definirEstado(EstadoSimulado.tarefaOlhosAbertos);
     await c.avancar(tester, const Duration(seconds: 12));
     expect(c.lotes.map((l) => l.poorSignal), everyElement(0));
-    await c.encerrar();
   });
 
-  testWidgets('bluetooth cai: lotes param e a 2ª reconexão volta do seq 0',
-      (tester) async {
-    final c = _Cenario(CenarioSimulado.bluetoothCai);
+  _testar('bluetooth cai: lotes param e a 2ª reconexão volta do seq 0',
+      CenarioSimulado.bluetoothCai, (tester, c) async {
     await c.conectar(tester);
     await c.avancar(tester, const Duration(milliseconds: 2500));
     c.conexoes.clear();
@@ -308,11 +318,11 @@ void main() {
     c.fonte.definirEstado(EstadoSimulado.olhosFechados);
     await c.avancar(tester, const Duration(seconds: 6));
     expect(c.fonte.estadoConexao, EstadoConexao.conectado);
-    await c.encerrar();
   });
 
-  testWidgets('conectar, desconectar e dispose idempotente', (tester) async {
-    final c = _Cenario(CenarioSimulado.tudoCerto);
+  _testar(
+      'conectar, desconectar e dispose idempotente', CenarioSimulado.tudoCerto,
+      (tester, c) async {
     final conexao = c.fonte.conectar(
       const DispositivoSinal(id: 'x', nome: 'Simulado', pareado: true),
     );
@@ -337,7 +347,6 @@ void main() {
     final pendente = c.fonte.reconectar();
     await c.fonte.dispose();
     expect(await pendente, isFalse);
-    await c.encerrar();
     await c.fonte.dispose();
   });
 }
