@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'ui/screens/home_screen.dart';
+import 'ui/teste/fluxo_teste_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -83,7 +83,9 @@ class BrainLinkApp extends StatelessWidget {
         ),
         dividerTheme: const DividerThemeData(color: Color(0xFF25334A)),
       ),
-      home: const HomeScreen(),
+      // O teste de atenção abre primeiro; a coleta guiada anterior continua
+      // acessível pelo link do rodapé do início.
+      home: const FluxoTesteScreen(),
     );
   }
 }

@@ -191,6 +191,106 @@ class BrainLinkBridge {
     }
   }
 
+  /// Gera os sons do teste no Android; `true` se todos ficaram prontos.
+  Future<bool> audioPrepare() async {
+    try {
+      return await _channel.invokeMethod<bool>('audioPrepare') ?? false;
+    } on PlatformException catch (error, stackTrace) {
+      _logger.error('Sons do teste indisponíveis', error, stackTrace);
+      return false;
+    }
+  }
+
+  /// Toca [som] (`grave`, `agudo`, `sino`, `sinoDuplo`, `bipeCalibracao`,
+  /// `alerta`) e devolve o `System.nanoTime()` lido logo antes do `play()`.
+  Future<int?> audioPlay(String som) async {
+    try {
+      final result =
+          await _channel.invokeMethod<Object?>('audioPlay', {'sound': som});
+      return (result as num?)?.toInt();
+    } on PlatformException catch (error, stackTrace) {
+      _logger.error('Não foi possível tocar $som', error, stackTrace);
+      return null;
+    }
+  }
+
+  /// Libera os sons gerados por [audioPrepare].
+  Future<bool> audioRelease() async {
+    try {
+      return await _channel.invokeMethod<bool>('audioRelease') ?? false;
+    } on PlatformException catch (error, stackTrace) {
+      _logger.error('Não foi possível liberar os sons', error, stackTrace);
+      return false;
+    }
+  }
+
+  /// Vibra uma vez: [timings] em ms (alternando pausa e vibração, começando
+  /// por pausa) e [amplitudes] de 0 a 255, do mesmo tamanho.
+  Future<bool> vibrate(List<int> timings, List<int> amplitudes) async {
+    try {
+      return await _channel.invokeMethod<bool>('vibrate', {
+            'timings': timings,
+            'amplitudes': amplitudes,
+          }) ??
+          false;
+    } on PlatformException catch (error, stackTrace) {
+      _logger.error('Não foi possível vibrar', error, stackTrace);
+      return false;
+    }
+  }
+
+  /// Liga ou desliga `FLAG_KEEP_SCREEN_ON` na janela do app.
+  Future<bool> setKeepScreenOn(bool on) async {
+    try {
+      return await _channel.invokeMethod<bool>('setKeepScreenOn', {'on': on}) ??
+          false;
+    } on PlatformException catch (error, stackTrace) {
+      _logger.error('Não foi possível manter a tela acesa', error, stackTrace);
+      return false;
+    }
+  }
+
+  /// Volume de mídia (`STREAM_MUSIC`) em passos do sistema.
+  Future<({int current, int max})?> getMediaVolume() async {
+    try {
+      final result =
+          await _channel.invokeMapMethod<String, Object?>('getMediaVolume');
+      final current = (result?['current'] as num?)?.toInt();
+      final max = (result?['max'] as num?)?.toInt();
+      if (current == null || max == null) return null;
+      return (current: current, max: max);
+    } on PlatformException catch (error, stackTrace) {
+      _logger.error('Volume de mídia indisponível', error, stackTrace);
+      return null;
+    }
+  }
+
+  /// `System.nanoTime()` do Android: o relógio dos sons e do EEG bruto.
+  Future<int?> monotonicNowNanos() async {
+    try {
+      final result = await _channel.invokeMethod<Object?>('monotonicNowNanos');
+      return (result as num?)?.toInt();
+    } on PlatformException catch (error, stackTrace) {
+      _logger.error('Relógio monotônico indisponível', error, stackTrace);
+      return null;
+    }
+  }
+
+  /// Aparelhos já pareados, sem varredura e sem pedir localização.
+  Future<List<BluetoothDeviceInfo>> getPairedDevices() async {
+    try {
+      final result =
+          await _channel.invokeListMethod<Object?>('getPairedDevices');
+      return [
+        for (final item in result ?? const <Object?>[])
+          if (item is Map<Object?, Object?>) BluetoothDeviceInfo.fromMap(item),
+      ];
+    } on PlatformException catch (error, stackTrace) {
+      _logger.error('Aparelhos pareados indisponíveis', error, stackTrace);
+      return const [];
+    }
+  }
+
   /// Encerra os streams mantidos pela ponte.
   Future<void> dispose() async {
     await Future.wait([
