@@ -728,7 +728,6 @@ public class MainActivity extends FlutterActivity {
         batch.put("poorSignal", poorSignal);
         batch.put("dropped", dropped);
         batch.put("samples", samples);
-        batch.put("sampleRateHz", RAW_BATCH_SIZE);
         if (observedSampleRateHz > 0) {
             batch.put("observedSampleRateHz", observedSampleRateHz);
         }

@@ -37,9 +37,10 @@ class ResultadoTarefa {
 ///
 /// O toque de um estímulo é o primeiro em `[início + respostaMinima,
 /// início do próximo estímulo)`; no último, até `início + intervaloMs`
-/// (inclusive). Toques antes de `respostaMinima` contam como antecipação e
-/// não são atribuídos. Estímulos interrompidos ou sem início ficam fora da
-/// conta. Preenche `Ensaio.toqueNanos` (e limpa valores anteriores).
+/// (inclusive), e nunca passa de `início + intervaloMs`. Toques antes de
+/// `respostaMinima` contam como antecipação e não são atribuídos. Estímulos
+/// interrompidos ou sem início ficam fora da conta, mas os interrompidos
+/// ainda encerram a janela do anterior. Preenche `Ensaio.toqueNanos` (e limpa valores anteriores).
 ResultadoTarefa pontuarTarefa({
   required List<Ensaio> ensaios,
   required List<int> toquesNanos,
@@ -48,9 +49,12 @@ ResultadoTarefa pontuarTarefa({
   for (final ensaio in ensaios) {
     ensaio.toqueNanos = null;
   }
-  final validos = [
+  // Todos os estímulos apresentados delimitam janelas, inclusive os
+  // interrompidos: um toque dado a um estímulo cortado pela pausa não pode
+  // ser atribuído ao anterior.
+  final apresentados = [
     for (final ensaio in ensaios)
-      if (ensaio.inicioNanos != null && !ensaio.interrompido) ensaio,
+      if (ensaio.inicioNanos != null) ensaio,
   ]..sort((a, b) => a.inicioNanos!.compareTo(b.inicioNanos!));
   final toques = [...toquesNanos]..sort();
   final minimaNanos = respostaMinima.inMicroseconds * 1000;
@@ -59,15 +63,18 @@ ResultadoTarefa pontuarTarefa({
   var raros = 0, comissoes = 0, antecipacoes = 0;
   final temposMs = <int>[];
 
-  for (var i = 0; i < validos.length; i++) {
-    final ensaio = validos[i];
+  for (var i = 0; i < apresentados.length; i++) {
+    final ensaio = apresentados[i];
+    if (ensaio.interrompido) continue;
     final inicio = ensaio.inicioNanos!;
     final inicioJanela = inicio + minimaNanos;
-    final ultimo = i == validos.length - 1;
-    // Fim exclusivo da janela; no último, `início + intervaloMs` entra.
-    final fimJanela = ultimo
-        ? inicio + ensaio.intervaloMs * 1000000 + 1
-        : validos[i + 1].inicioNanos!;
+    // Fim exclusivo: o próximo estímulo apresentado ou, no máximo,
+    // `início + intervaloMs` (que entra). Assim a janela não atravessa uma
+    // pausa nem a contagem de retomada.
+    final limite = inicio + ensaio.intervaloMs * 1000000 + 1;
+    final proximo =
+        i == apresentados.length - 1 ? null : apresentados[i + 1].inicioNanos!;
+    final fimJanela = proximo == null || proximo > limite ? limite : proximo;
 
     int? resposta;
     for (final toque in toques) {

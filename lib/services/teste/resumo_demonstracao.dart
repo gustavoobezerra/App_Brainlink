@@ -120,10 +120,12 @@ MedidaAlfa _medir(
     ) ??
     const MedidaAlfa(potencia: null, segundosLimpos: 0);
 
+/// Uma medida que falha vira "sem número" (com o motivo) em vez de impedir a
+/// tela de resultados de abrir.
 T? _seguro<T>(T Function() calcular) {
   try {
     return calcular();
-  } on UnimplementedError {
+  } catch (_) {
     return null;
   }
 }

@@ -87,19 +87,29 @@ void main() {
     expect(fora.single.toqueNanos, isNull);
   });
 
-  test('interrompidos e sem início ficam fora; a janela os pula', () {
-    final ensaios = _ensaios([(_c, 0), (_c, 1000), (_r, null), (_c, 3000)]);
+  test('interrompido fica fora, mas encerra a janela do anterior', () {
+    final ensaios = _ensaios([(_r, 0), (_c, 1000), (_r, null), (_c, 3000)]);
     ensaios[1].interrompido = true;
     final r = pontuarTarefa(
       ensaios: ensaios,
-      // 1500 ms: cai na janela do 1º (até o próximo válido, em 3000 ms).
+      // 1500 ms: toque dado ao estímulo interrompido; não vira comissão do
+      // raro anterior. 3200 ms: acerto do último.
       toquesNanos: [1500 * _ms, 3200 * _ms],
     );
-    expect(r.comuns, 2);
-    expect(r.raros, 0);
-    expect(r.acertos, 2);
-    expect(r.temposMs, [1500, 200]);
+    expect(r.comuns, 1);
+    expect(r.raros, 1);
+    expect(r.comissoes, 0);
+    expect(r.acertos, 1);
+    expect(r.temposMs, [200]);
+    expect(ensaios[0].toqueNanos, isNull);
     expect(ensaios[1].toqueNanos, isNull);
+  });
+
+  test('a janela não passa de início + intervalo (pausa entre estímulos)', () {
+    final ensaios = _ensaios([(_c, 0), (_c, 5000)]);
+    final r = pontuarTarefa(ensaios: ensaios, toquesNanos: [3000 * _ms]);
+    expect(r.acertos, 0);
+    expect(r.omissoes, 2);
   });
 
   test('ordena por início e limpa toques antigos', () {

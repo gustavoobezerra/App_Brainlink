@@ -102,15 +102,7 @@ class FonteHeadset implements FonteSinal {
       _definirEstado(EstadoConexao.conectado);
       return const AutoConectado();
     }
-    final pareados = [
-      for (final aparelho in await _ponte.getPairedDevices())
-        if (aparelho.address.isNotEmpty)
-          DispositivoSinal(
-            id: aparelho.address,
-            nome: aparelho.name,
-            pareado: true,
-          ),
-    ];
+    final pareados = await _pareados();
     final brainLinks = pareados.where((d) => _ehBrainLink(d.nome)).toList();
     if (brainLinks.length == 1) {
       try {
@@ -124,6 +116,22 @@ class FonteHeadset implements FonteSinal {
       ...brainLinks,
       ...pareados.where((d) => !_ehBrainLink(d.nome)),
     ]);
+  }
+
+  Future<List<DispositivoSinal>> _pareados() async => [
+        for (final aparelho in await _ponte.getPairedDevices())
+          if (aparelho.address.isNotEmpty)
+            DispositivoSinal(
+              id: aparelho.address,
+              nome: aparelho.name,
+              pareado: true,
+            ),
+      ];
+
+  Future<DispositivoSinal?> _unicoBrainLinkPareado() async {
+    final brainLinks =
+        (await _pareados()).where((d) => _ehBrainLink(d.nome)).toList();
+    return brainLinks.length == 1 ? brainLinks.single : null;
   }
 
   @override
@@ -167,7 +175,9 @@ class FonteHeadset implements FonteSinal {
 
   @override
   Future<bool> reconectar() async {
-    final ultimo = _ultimo;
+    // A fonte pode ter nascido com o headset já conectado (ex.: volta da
+    // simulação): sem `_ultimo`, tenta o único BrainLink pareado.
+    final ultimo = _ultimo ?? await _unicoBrainLinkPareado();
     if (ultimo == null) return false;
     try {
       await conectar(ultimo);

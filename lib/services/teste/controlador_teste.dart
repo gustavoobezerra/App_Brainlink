@@ -313,10 +313,20 @@ class ControladorTeste extends ChangeNotifier {
   }
 
   String _codigo = '';
+  bool _comecando = false;
 
   /// "Começar": prepara os sons, liga a tela acesa e confere o volume.
   Future<void> comecar(String codigoParticipante) async {
-    if (_etapa != EtapaTeste.inicio) return;
+    if (_etapa != EtapaTeste.inicio || _comecando) return;
+    _comecando = true;
+    try {
+      await _comecar(codigoParticipante);
+    } finally {
+      _comecando = false;
+    }
+  }
+
+  Future<void> _comecar(String codigoParticipante) async {
     _codigo = codigoParticipante.trim();
     unawaited(_estimulos.preparar());
     unawaited(_estimulos.manterTelaAcesa(true));
@@ -704,6 +714,12 @@ class ControladorTeste extends ChangeNotifier {
     _ensaioTreinoAtual = ensaio;
     ensaio.inicioNanos = await _apresentar(ensaio.tipo);
     if (_descartado || _etapa != EtapaTeste.treino) return;
+    if (_treinoCongelado) {
+      // Pausa ou saída chegou durante a apresentação: repete este ensaio.
+      ensaio.interrompido = true;
+      if (_treinoIndice > 0) _treinoIndice--;
+      return;
+    }
     _janelaTreinoAberta = true;
     notifyListeners();
     _timerTreino = Timer(_duracoes.janelaTreino, () {
@@ -1187,6 +1203,7 @@ class ControladorTeste extends ChangeNotifier {
   Future<void> encerrarParaColetaAnterior() async {
     _pararTudo();
     unawaited(_estimulos.manterTelaAcesa(false));
+    unawaited(_estimulos.liberar());
     final fonte = _fonte;
     _fonte = null;
     for (final assinatura in _assinaturas) {
@@ -1539,6 +1556,9 @@ class ControladorTeste extends ChangeNotifier {
 
   void _irPara(EtapaTeste etapa) {
     _etapa = etapa;
+    // Uma transição durante a pausa (ex.: fim da espera pelos dados da
+    // calibração) também é para onde "Retomar" deve voltar.
+    if (_pausa != null) _etapaRetorno = etapa;
     if (etapa != EtapaTeste.volumeBaixo) _timerVolume?.cancel();
     notifyListeners();
   }
@@ -1599,6 +1619,7 @@ class ControladorTeste extends ChangeNotifier {
     }
     _assinaturas.clear();
     unawaited(_estimulos.manterTelaAcesa(false));
+    unawaited(_estimulos.liberar());
     unawaited(_fonte?.dispose());
     super.dispose();
   }

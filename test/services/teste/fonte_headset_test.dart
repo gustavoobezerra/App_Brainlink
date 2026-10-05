@@ -260,6 +260,15 @@ void main() {
       await fonte.dispose();
     });
 
+    test('sem último aparelho, reconectar usa o único BrainLink pareado',
+        () async {
+      pareados = [aparelho('00:11:22:33:44:55', 'BrainLink_Lite')];
+      final fonte = criar();
+      expect(await fonte.reconectar(), isTrue);
+      expect(gateway.conexoes.map((d) => d.id), ['00:11:22:33:44:55']);
+      await fonte.dispose();
+    });
+
     test('desconectar chama o Android e atualiza o estado', () async {
       await doAndroid('onConnectionStateChanged', true);
       final fonte = criar();
